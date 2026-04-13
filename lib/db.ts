@@ -1,4 +1,8 @@
-import { Pool } from "pg";
+import { Pool, types } from "pg";
+
+// Prevent pg from parsing DATE (OID 1082) into JS Date objects (which shift timezone).
+// Return as plain "YYYY-MM-DD" strings instead.
+types.setTypeParser(1082, (val: string) => val);
 
 const pool = new Pool({
   host: process.env.DB_HOST,
