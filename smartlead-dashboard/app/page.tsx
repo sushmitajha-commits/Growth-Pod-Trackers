@@ -25,7 +25,6 @@ type EmailRow = {
   lift_from_burner: number | null;
   if_no_burner: number | null;
   difference: number | null;
-  cost_lift: number | null;
 };
 
 type CallRow = {
@@ -38,6 +37,12 @@ type CallRow = {
   justcall_calls: number;
   unique_dials: number;
   demos: number;
+  demos_scheduled: number;
+  showup_rate: number;
+  showups: number;
+  showups_mtd: number;
+  showup_target: number;
+  showup_attainment: number;
 };
 
 /* ─── Helpers ─── */
@@ -65,9 +70,9 @@ const EMAIL_COLS: ColDef<EmailRow>[] = [
   { key: "inboxes_at_capacity",      short: "Inboxes @ Cap",      full: "# of Inboxes Used to Capacity", group: "health" },
   { key: "domains_at_capacity",      short: "Domains @ Cap",      full: "# of Domains Used to Capacity", group: "health" },
   { key: "domains_above_reputation", short: "Domains Good Rep",   full: "# of Domains above Acceptable Reputation Score", group: "health" },
-  { key: "emails_2plus_opens",       short: "Unique >=2 Opens",    full: "# of Unique Leads with >=2 Opens (daily)", group: "engagement" },
-  { key: "open_2plus_rate",          short: ">=2 Open Rate",       full: "2+ Open to Email Sent Rate", suffix: "%", group: "engagement" },
-  { key: "unique_2plus_no_call",     short: ">=2 Opens No Call",   full: "# of Unique Contacts >=2 Opens, No Call", group: "engagement" },
+  { key: "emails_2plus_opens",       short: "Unique >=2 Opens",   full: "# of Unique Leads with >=2 Opens (daily)", group: "engagement" },
+  { key: "open_2plus_rate",          short: ">=2 Open Rate",      full: ">=2 Open to Email Sent Rate", suffix: "%", group: "engagement" },
+  { key: "unique_2plus_no_call",     short: ">=2 Opens No Call",  full: "# First-time >=2 Opens with Phone Number", group: "engagement" },
   { key: "calls_burner",             short: "Calls (Burner)",     full: "# of Calls to Burner Email Opens [Incl. Manual Dials]", group: "burner" },
   { key: "demos_burner",             short: "Demos (Burner)",     full: "# of Demos Booked from Burner Emails", group: "burner" },
   { key: "demo_call_rate_burner",    short: "Demo:Call Burner",   full: "Demo to Call Rate - Burner Email", suffix: "%", group: "burner" },
@@ -80,15 +85,21 @@ const EMAIL_COLS: ColDef<EmailRow>[] = [
 ];
 
 const CALL_COLS: ColDef<CallRow>[] = [
-  { key: "date",               short: "Date",              full: "Date" },
-  { key: "total_calls",        short: "# of Calls",        full: "# of Calls" },
-  { key: "calls_mtd",          short: "# Calls MTD",       full: "# of Calls MTD" },
-  { key: "target",             short: "Month Target",       full: "# of Calls Month - Target" },
-  { key: "attainment",         short: "Attainment",         full: "# of Calls Attainment", suffix: "%" },
-  { key: "sales_dialer_calls", short: "SalesDialer",        full: "# SalesDialer Calls" },
-  { key: "justcall_calls",     short: "JustCall",           full: "# JustCall Calls" },
-  { key: "unique_dials",       short: "Unique Dials",       full: "# of Unique Dials per Day" },
-  { key: "demos",              short: "Demos (Call Date)",   full: "# of Demos (Call Date)" },
+  { key: "date",               short: "Date",              full: "Date", group: "core" },
+  { key: "total_calls",        short: "# of Calls",        full: "# of Calls", group: "core" },
+  { key: "calls_mtd",          short: "# Calls MTD",       full: "# of Calls MTD", group: "core" },
+  { key: "target",             short: "Month Target",       full: "# of Calls Month - Target", group: "core" },
+  { key: "attainment",         short: "Attainment",         full: "# of Calls Attainment", suffix: "%", group: "core" },
+  { key: "sales_dialer_calls", short: "SalesDialer",        full: "# SalesDialer Calls", group: "health" },
+  { key: "justcall_calls",     short: "JustCall",           full: "# JustCall Calls", group: "health" },
+  { key: "unique_dials",       short: "Unique Dials",       full: "# of Unique Dials per Day", group: "health" },
+  { key: "demos",              short: "Demos (Call Date)",   full: "# of Demos (Call Date)", group: "engagement" },
+  { key: "demos_scheduled",   short: "# Demos Scheduled",   full: "# of Demos Scheduled", group: "engagement" },
+  { key: "showup_rate",       short: "Showup Rate",          full: "Showup Rate (Showups / Demos Scheduled)", suffix: "%", group: "engagement" },
+  { key: "showups",            short: "# Showups",           full: "# of Showups", group: "burner" },
+  { key: "showups_mtd",        short: "Showups MTD",         full: "# of Showups Month to Date", group: "burner" },
+  { key: "showup_target",      short: "Showup Target",       full: "Showup Target (Cumulative)", group: "burner" },
+  { key: "showup_attainment",  short: "Showup Attainment",   full: "Showup Attainment %", suffix: "%", group: "burner" },
 ];
 
 const GROUP_BORDER: Record<string, string> = {
@@ -146,6 +157,12 @@ export default function Dashboard() {
         ...r,
         unique_dials: Number(r.unique_dials ?? 0),
         demos: Number(r.demos ?? 0),
+        demos_scheduled: Number(r.demos_scheduled ?? 0),
+        showup_rate: Number(r.showup_rate ?? 0),
+        showups: Number(r.showups ?? 0),
+        showups_mtd: Number(r.showups_mtd ?? 0),
+        showup_target: Number(r.showup_target ?? 0),
+        showup_attainment: Number(r.showup_attainment ?? 0),
       })));
     } catch (e: unknown) {
       setCallError(e instanceof Error ? e.message : "Unknown error");
@@ -161,8 +178,8 @@ export default function Dashboard() {
   const emailSummary = emailRows.length > 0 ? {
     totalSent: emailRows.reduce((s, r) => s + r.emails_sent, 0),
     avgBounce: (emailRows.reduce((s, r) => s + r.bounce_rate, 0) / emailRows.length).toFixed(2),
-    totalBurnerDemos: emailRows.reduce((s, r) => s + (r.demos_burner ?? 0), 0),
     totalUnique2Plus,
+    totalBurnerDemos: emailRows.reduce((s, r) => s + (r.demos_burner ?? 0), 0),
   } : null;
 
   const callSummary = callRows.length > 0 ? {
@@ -189,7 +206,7 @@ export default function Dashboard() {
   function renderCallCell(row: CallRow, col: ColDef<CallRow>) {
     const val = row[col.key];
     if (col.key === "date") return <span className="font-mono text-[11px] font-medium text-white/60">{String(val)}</span>;
-    if (col.key === "attainment") return renderAttainment(val as number);
+    if (col.key === "attainment" || col.key === "showup_attainment") return renderAttainment(val as number);
     return <span className="text-white/75">{fmt(val as number, col.suffix || "")}</span>;
   }
 
@@ -351,7 +368,7 @@ export default function Dashboard() {
                   <tr>
                     {CALL_COLS.map(col => (
                       <th key={col.key} title={col.full}
-                        className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em]">
+                        className={`px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 ${GROUP_BORDER[col.group || ""] || "border-l-transparent"}`}>
                         {col.short}
                       </th>
                     ))}
@@ -365,7 +382,8 @@ export default function Dashboard() {
                     <tr key={row.date}
                       className={`hover:bg-white/[0.025] transition-colors ${i % 2 !== 0 ? "bg-white/[0.008]" : ""}`}>
                       {CALL_COLS.map(col => (
-                        <td key={col.key} className="px-4 py-2.5 whitespace-nowrap tabular-nums">
+                        <td key={col.key}
+                          className={`px-4 py-2.5 whitespace-nowrap tabular-nums border-l-2 ${GROUP_BORDER[col.group || ""] || "border-l-transparent"}`}>
                           {renderCallCell(row, col)}
                         </td>
                       ))}
