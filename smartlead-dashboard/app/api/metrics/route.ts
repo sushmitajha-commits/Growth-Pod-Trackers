@@ -194,7 +194,7 @@ export async function GET(req: NextRequest) {
       [from, to]
     );
 
-    // 5) Total unique leads with >2 opens across entire date range (for summary card)
+    // 5) Total unique leads with >=2 opens across entire date range (for summary card)
     const uniqueOpensResult = await client.query(
       `
       SELECT COUNT(DISTINCT LOWER(TRIM(lead_email))) AS total_unique_2plus
@@ -214,7 +214,7 @@ export async function GET(req: NextRequest) {
     // Build lookup maps
     const noCallMap: Record<string, number> = {};
     for (const r of noCallResult.rows) {
-      noCallMap[r.date instanceof Date ? r.date.toISOString().split("T")[0] : String(r.date)] = Number(r.unique_2plus_no_call);
+      noCallMap[String(r.date)] = Number(r.unique_2plus_no_call);
     }
 
     const callsMap: Record<string, {
@@ -223,8 +223,7 @@ export async function GET(req: NextRequest) {
       burner_cost: number;
     }> = {};
     for (const r of callsResult.rows) {
-      const d = r.call_date instanceof Date ? r.call_date.toISOString().split("T")[0] : String(r.call_date);
-      callsMap[d] = {
+      callsMap[String(r.call_date)] = {
         burner_calls: Number(r.burner_calls),
         burner_demos: Number(r.burner_demos),
         non_burner_calls: Number(r.non_burner_calls),
@@ -234,7 +233,7 @@ export async function GET(req: NextRequest) {
     }
 
     const rows = statsResult.rows.map((r) => {
-      const dateStr = r.date instanceof Date ? r.date.toISOString().split("T")[0] : String(r.date);
+      const dateStr = String(r.date);
       const totalSends = Number(r.total_sends);
       const target = TARGETS[dateStr] ?? null;
       const attainment = target ? Number(((totalSends / target) * 100).toFixed(1)) : null;
@@ -257,10 +256,6 @@ export async function GET(req: NextRequest) {
       // Difference = actual burner demos - hypothetical
       const difference = c.burner_demos - ifNoBurner;
 
-      // Cost Lift = burner cost / incremental demos from burner
-      const costLift = difference > 0
-        ? Number((c.burner_cost / difference).toFixed(2)) : 0;
-
       return {
         date: dateStr,
         emails_sent: totalSends,
@@ -282,7 +277,6 @@ export async function GET(req: NextRequest) {
         lift_from_burner: liftFromBurner,
         if_no_burner: ifNoBurner,
         difference,
-        cost_lift: costLift,
       };
     });
 
