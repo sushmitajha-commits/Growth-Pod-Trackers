@@ -45,9 +45,10 @@ export async function GET() {
           SUM(CASE WHEN campaign_id IS NOT NULL THEN 1 ELSE 0 END)           AS sales_dialer_calls,
           SUM(CASE WHEN campaign_id IS NULL     THEN 1 ELSE 0 END)           AS justcall_calls,
           COUNT(DISTINCT contact_number)                                      AS unique_dials,
-          SUM(CASE WHEN disposition IN ('Qualified : DM : Meeting Booked', 'Qualified: DM : Meeting Booked') THEN 1 ELSE 0 END) AS demos
+          SUM(CASE WHEN disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END) AS demos
         FROM gist.justcall_burner_email_call_logs
-        WHERE campaign_name NOT ILIKE '%meta%'
+        WHERE COALESCE(campaign_name, '') NOT ILIKE '%meta%'
+          AND COALESCE(agent_name, '') NOT ILIKE '%allaine%'
           AND ((call_date::text || ' ' || call_time::text)::timestamp - interval '4 hours')::date >= DATE_TRUNC('month', CURRENT_DATE)::date
         GROUP BY 1
       )
