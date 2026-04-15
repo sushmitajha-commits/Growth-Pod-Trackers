@@ -36,13 +36,24 @@ type CallRow = {
   sales_dialer_calls: number;
   justcall_calls: number;
   unique_dials: number;
+  new_contacts: number;
+  unique_contacts_mtd: number;
+  monthly_max_contacts: number;
+  pct_contacts_used: number;
   demos: number;
   demos_scheduled: number;
+  demos_scheduled_mtd: number;
+  demo_plan: number;
+  demo_attainment: number;
+  demo_to_call_rate: number;
   showup_rate: number;
   showups: number;
   showups_mtd: number;
   showup_target: number;
+  showup_plan: number;
   showup_attainment: number;
+  working_days_gone: number;
+  pct_working_days: number;
 };
 
 /* ─── Helpers ─── */
@@ -85,21 +96,32 @@ const EMAIL_COLS: ColDef<EmailRow>[] = [
 ];
 
 const CALL_COLS: ColDef<CallRow>[] = [
-  { key: "date",               short: "Date",              full: "Date", group: "core" },
-  { key: "total_calls",        short: "# of Calls",        full: "# of Calls", group: "core" },
-  { key: "calls_mtd",          short: "# Calls MTD",       full: "# of Calls MTD", group: "core" },
-  { key: "target",             short: "Month Target",       full: "# of Calls Month - Target", group: "core" },
-  { key: "attainment",         short: "Attainment",         full: "# of Calls Attainment", suffix: "%", group: "core" },
-  { key: "sales_dialer_calls", short: "SalesDialer",        full: "# SalesDialer Calls", group: "health" },
-  { key: "justcall_calls",     short: "JustCall",           full: "# JustCall Calls", group: "health" },
-  { key: "unique_dials",       short: "Unique Dials",       full: "# of Unique Dials per Day", group: "health" },
-  { key: "demos",              short: "Demos (Call Date)",   full: "# of Demos (Call Date)", group: "engagement" },
-  { key: "demos_scheduled",   short: "# Demos Scheduled",   full: "# of Demos Scheduled", group: "engagement" },
-  { key: "showup_rate",       short: "Showup Rate",          full: "Showup Rate (Showups / Demos Scheduled)", suffix: "%", group: "engagement" },
-  { key: "showups",            short: "# Showups",           full: "# of Showups", group: "burner" },
-  { key: "showups_mtd",        short: "Showups MTD",         full: "# of Showups Month to Date", group: "burner" },
-  { key: "showup_target",      short: "Showup Target",       full: "Showup Target (Cumulative)", group: "burner" },
-  { key: "showup_attainment",  short: "Showup Attainment",   full: "Showup Attainment %", suffix: "%", group: "burner" },
+  { key: "date",                short: "Date",                full: "Date", group: "core" },
+  { key: "total_calls",         short: "# of Calls",          full: "# of Calls", group: "core" },
+  { key: "calls_mtd",           short: "# Calls MTD",         full: "# of Calls MTD", group: "core" },
+  { key: "target",              short: "Month Target",         full: "# of Calls Month - Target", group: "core" },
+  { key: "attainment",          short: "Calls Attainment",     full: "# of Calls Attainment", suffix: "%", group: "core" },
+  { key: "sales_dialer_calls",  short: "SalesDialer",          full: "# SalesDialer Calls", group: "health" },
+  { key: "justcall_calls",      short: "JustCall",             full: "# JustCall Calls", group: "health" },
+  { key: "unique_dials",        short: "Unique Dials",         full: "# of Unique Dials per Day", group: "health" },
+  { key: "new_contacts",        short: "New Contacts",         full: "# Total New Contacts Loaded", group: "health" },
+  { key: "unique_contacts_mtd", short: "Unique MTD",           full: "# of Unique Contacts MTD", group: "health" },
+  { key: "monthly_max_contacts",short: "Max Contacts",         full: "Monthly Maximum Unique Contacts (79,000)", group: "health" },
+  { key: "pct_contacts_used",   short: "% Contacts Used",      full: "Percentage of Monthly Contacts Used", suffix: "%", group: "health" },
+  { key: "demos",               short: "Demos (Call)",         full: "# of Demos (Call Date)", group: "engagement" },
+  { key: "demos_scheduled",     short: "Demos (Sched)",        full: "# of Demos (Scheduled)", group: "engagement" },
+  { key: "demos_scheduled_mtd", short: "Demos Sched MTD",      full: "# of Demos (Scheduled) MTD", group: "engagement" },
+  { key: "demo_plan",           short: "Demo Plan",            full: "# of Demos Plan for Month", group: "engagement" },
+  { key: "demo_attainment",     short: "Demo Attainment",      full: "Attainment - Demos", suffix: "%", group: "engagement" },
+  { key: "demo_to_call_rate",   short: "Demo:Call Rate",       full: "Demo to Call Rate (Call Date)", suffix: "%", group: "engagement" },
+  { key: "showup_rate",         short: "Showup Rate",          full: "Show-up to Demo Rate (Demo Date)", suffix: "%", group: "burner" },
+  { key: "showups",             short: "# Showups",            full: "# of Show-ups", group: "burner" },
+  { key: "showups_mtd",         short: "Showups MTD",          full: "# of Show-ups MTD", group: "burner" },
+  { key: "showup_target",       short: "Target MTD",           full: "#Target MTD", group: "burner" },
+  { key: "showup_plan",         short: "Showup Plan",          full: "# of Show-ups Plan (250)", group: "burner" },
+  { key: "showup_attainment",   short: "Showup Attainment",    full: "Attainment - Show-ups", suffix: "%", group: "burner" },
+  { key: "working_days_gone",   short: "Days Gone",            full: "Working Days Gone", group: "lift" },
+  { key: "pct_working_days",    short: "% Days Gone",          full: "Percentage of Working Days Gone", suffix: "%", group: "lift" },
 ];
 
 const GROUP_BORDER: Record<string, string> = {
@@ -156,13 +178,24 @@ export default function Dashboard() {
       setCallRows(json.rows.map((r: Record<string, unknown>) => ({
         ...r,
         unique_dials: Number(r.unique_dials ?? 0),
+        new_contacts: Number(r.new_contacts ?? 0),
+        unique_contacts_mtd: Number(r.unique_contacts_mtd ?? 0),
+        monthly_max_contacts: Number(r.monthly_max_contacts ?? 79000),
+        pct_contacts_used: Number(r.pct_contacts_used ?? 0),
         demos: Number(r.demos ?? 0),
         demos_scheduled: Number(r.demos_scheduled ?? 0),
+        demos_scheduled_mtd: Number(r.demos_scheduled_mtd ?? 0),
+        demo_plan: Number(r.demo_plan ?? 0),
+        demo_attainment: Number(r.demo_attainment ?? 0),
+        demo_to_call_rate: Number(r.demo_to_call_rate ?? 0),
         showup_rate: Number(r.showup_rate ?? 0),
         showups: Number(r.showups ?? 0),
         showups_mtd: Number(r.showups_mtd ?? 0),
         showup_target: Number(r.showup_target ?? 0),
+        showup_plan: Number(r.showup_plan ?? 250),
         showup_attainment: Number(r.showup_attainment ?? 0),
+        working_days_gone: Number(r.working_days_gone ?? 0),
+        pct_working_days: Number(r.pct_working_days ?? 0),
       })));
     } catch (e: unknown) {
       setCallError(e instanceof Error ? e.message : "Unknown error");
@@ -183,10 +216,12 @@ export default function Dashboard() {
   } : null;
 
   const callSummary = callRows.length > 0 ? {
-    totalCalls: callRows.reduce((s, r) => s + r.total_calls, 0),
-    totalDemos: callRows.reduce((s, r) => s + r.demos, 0),
-    totalUnique: callRows.reduce((s, r) => s + r.unique_dials, 0),
-    latestMtd: callRows[0]?.calls_mtd ?? 0,
+    callsMtd: callRows[0]?.calls_mtd ?? 0,
+    callsAttainment: callRows[0]?.attainment ?? 0,
+    showupsMtd: callRows[0]?.showups_mtd ?? 0,
+    showupAttainment: callRows[0]?.showup_attainment ?? 0,
+    demoScheduledMtd: callRows[0]?.demos_scheduled_mtd ?? 0,
+    demoAttainment: callRows[0]?.demo_attainment ?? 0,
   } : null;
 
   function renderAttainment(val: number | null) {
@@ -206,7 +241,7 @@ export default function Dashboard() {
   function renderCallCell(row: CallRow, col: ColDef<CallRow>) {
     const val = row[col.key];
     if (col.key === "date") return <span className="font-mono text-[11px] font-medium text-white/60">{String(val)}</span>;
-    if (col.key === "attainment" || col.key === "showup_attainment") return renderAttainment(val as number);
+    if (col.key === "attainment" || col.key === "showup_attainment" || col.key === "demo_attainment") return renderAttainment(val as number);
     return <span className="text-white/75">{fmt(val as number, col.suffix || "")}</span>;
   }
 
@@ -336,10 +371,10 @@ export default function Dashboard() {
           <>
             {callSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                <StatCard label="Total Calls" value={callSummary.totalCalls.toLocaleString()} sub="this month" color="blue" />
-                <StatCard label="MTD Progress" value={callSummary.latestMtd.toLocaleString()} sub="of 100,000 target" color="amber" />
-                <StatCard label="Unique Dials" value={callSummary.totalUnique.toLocaleString()} sub="distinct numbers" color="emerald" />
-                <StatCard label="Demos Booked" value={callSummary.totalDemos.toLocaleString()} sub="from calls" color="violet" />
+                <StatCard label="Calls MTD" value={callSummary.callsMtd.toLocaleString()} sub={`${callSummary.callsAttainment}% of 100K target`} color="blue" />
+                <StatCard label="Demos Scheduled MTD" value={callSummary.demoScheduledMtd.toLocaleString()} sub={`${callSummary.demoAttainment}% of 550 target`} color="amber" />
+                <StatCard label="Showups MTD" value={callSummary.showupsMtd.toLocaleString()} sub={`${callSummary.showupAttainment}% of 250 target`} color="emerald" />
+                <StatCard label="Showup Attainment" value={`${callSummary.showupAttainment}%`} sub="vs 250 plan" color="violet" />
               </div>
             )}
 
