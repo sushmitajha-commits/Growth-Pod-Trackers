@@ -170,13 +170,14 @@ export async function GET(req: NextRequest) {
           REGEXP_REPLACE(jc.contact_number, '\\D', '', 'g') AS norm_phone
         FROM gist.justcall_burner_email_call_logs jc
         WHERE jc.contact_number IS NOT NULL
-          AND jc.campaign_name NOT ILIKE '%meta%'
+          AND COALESCE(jc.campaign_name, '') NOT ILIKE '%meta%'
+          AND COALESCE(jc.agent_name, '') NOT ILIKE '%allaine%'
           AND jc.call_date >= $1::date AND jc.call_date <= $2::date
       ),
       calls_labeled AS (
         SELECT cb.call_date, cb.cost_incurred,
           CASE WHEN sl.lead_id IS NOT NULL THEN 'burner' ELSE 'non_burner' END AS burner_flag,
-          CASE WHEN COALESCE(cb.disposition, '') IN ('Qualified : DM : Meeting Booked', 'Qualified: DM : Meeting Booked') THEN 1 ELSE 0 END AS is_demo_booked
+          CASE WHEN cb.disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END AS is_demo_booked
         FROM calls_base cb
         LEFT JOIN smartlead_dedup sl ON cb.norm_phone = sl.norm_phone
       )
