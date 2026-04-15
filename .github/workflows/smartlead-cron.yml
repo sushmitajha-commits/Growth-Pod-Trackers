@@ -1,0 +1,31 @@
+name: Smartlead Daily Sync
+
+on:
+  schedule:
+    - cron: "30 2 * * *"   # 🔥 8:00 AM IST
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install requests psycopg2-binary
+
+      - name: Run Smartlead Script
+        env:
+          API_KEY: "b28c718c-de8b-40f9-b84d-713423720471_cnwnqia"
+          DB_HOST: "gw-rds-analytics.celzx4qnlkfp.us-east-1.rds.amazonaws.com"
+          DB_USER: "airbyte_user"
+          DB_PASSWORD: "airbyte_user_password"
+        run: python Upsert_SmartLead_Leads_and_Statistics_Data.py
