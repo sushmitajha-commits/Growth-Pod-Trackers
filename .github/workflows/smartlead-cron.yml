@@ -28,4 +28,4 @@ jobs:
           DB_HOST: "gw-rds-analytics.celzx4qnlkfp.us-east-1.rds.amazonaws.com"
           DB_USER: "airbyte_user"
           DB_PASSWORD: "airbyte_user_password"
-        run: python Upsert_SmartLead_Leads_and_Statistics_Data.py
+        run: python upsert_smartlead_leads_and_statistics_data.py
