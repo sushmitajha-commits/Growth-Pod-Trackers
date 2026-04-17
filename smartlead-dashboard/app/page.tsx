@@ -139,7 +139,7 @@ export default function Dashboard() {
   const today = new Date().toISOString().split("T")[0];
   const monthStart = currentMonthStart();
 
-  const [tab, setTab] = useState<"email" | "calls">("email");
+  const [tab, setTab] = useState<"email" | "calls" | "ae">("email");
 
   const [from, setFrom]             = useState(monthStart);
   const [to, setTo]                 = useState(today);
@@ -151,6 +151,13 @@ export default function Dashboard() {
   const [callRows, setCallRows]     = useState<CallRow[]>([]);
   const [callLoading, setCallLoading] = useState(false);
   const [callError, setCallError]   = useState<string | null>(null);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [aeRows, setAeRows] = useState<any[]>([]);
+  const [aeLoading, setAeLoading] = useState(false);
+  const [aeError, setAeError] = useState<string | null>(null);
+
+
 
   const fetchEmail = useCallback(async () => {
     setEmailLoading(true);
@@ -205,7 +212,23 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { fetchEmail(); }, [fetchEmail]);
+  const fetchAe = useCallback(async () => {
+    setAeLoading(true);
+    setAeError(null);
+    try {
+      const res = await fetch("/api/ae-tracker");
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setAeRows(json.rows);
+    } catch (e: unknown) {
+      setAeError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setAeLoading(false);
+    }
+  }, []);
+
   useEffect(() => { fetchCalls(); }, [fetchCalls]);
+  useEffect(() => { fetchAe(); }, [fetchAe]);
 
   /* ─── Summary stats ─── */
   const emailSummary = emailRows.length > 0 ? {
@@ -293,6 +316,12 @@ export default function Dashboard() {
             }`}>
             Cold Calling
           </button>
+          <button onClick={() => setTab("ae")}
+            className={`px-5 py-2 rounded-lg text-[12px] font-medium transition-all duration-200 ${
+              tab === "ae" ? "bg-white/[0.08] text-white" : "text-white/30 hover:text-white/50"
+            }`}>
+            Daily AE Tracker
+          </button>
         </div>
 
         {/* ─── Burner Email Tab ─── */}
@@ -360,6 +389,118 @@ export default function Dashboard() {
                       ))}
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* ─── Daily AE Tracker Tab ─── */}
+        {tab === "ae" && (
+          <>
+            {aeRows.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+                <StatCard label="Show-ups MTD" value={aeRows[0]?.showups_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.showup_attainment ?? 0}% of ${aeRows[0]?.showup_target ?? 250}`} color="blue" />
+                <StatCard label="Demos MTD" value={aeRows[0]?.demos_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.demo_attainment ?? 0}% of ${aeRows[0]?.demo_target ?? 550}`} color="emerald" />
+                <StatCard label="Closes MTD" value={aeRows[0]?.closes_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.close_attainment ?? 0}% attainment`} color="amber" />
+                <StatCard label="ARR Closed MTD" value={`$${(aeRows[0]?.arr_mtd ?? 0).toLocaleString()}`} sub={`${aeRows[0]?.arr_attainment ?? 0}% attainment`} color="violet" />
+                <StatCard label="Working Days" value={`${aeRows[0]?.working_days_gone ?? 0} / 22`} sub={`${aeRows[0]?.pct_working_days ?? 0}% gone`} color="blue" />
+              </div>
+            )}
+
+            <div className="flex items-center gap-2.5 mb-6">
+              <div className="bg-white/[0.02] rounded-lg px-3 py-1.5">
+                <span className="text-[9px] text-white/20 uppercase tracking-[0.15em] font-semibold">Current Month to Date</span>
+              </div>
+              <button onClick={fetchAe}
+                className="bg-white/[0.06] hover:bg-white/[0.10] text-white/70 hover:text-white px-4 py-1.5 rounded-lg text-[11px] font-medium transition-all">
+                Refresh
+              </button>
+              {aeLoading && (
+                <div className="flex items-center gap-1.5 ml-1">
+                  <div className="w-3 h-3 border-[1.5px] border-white/10 border-t-white/40 rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+
+            {aeError && (
+              <div className="bg-rose-500/5 text-rose-300/80 rounded-xl p-3 mb-5 text-[11px]">{aeError}</div>
+            )}
+
+            <div className="overflow-x-auto rounded-xl bg-white/[0.015]">
+              <table className="text-[11px] w-max">
+                <thead>
+                  <tr>
+                    {[
+                      { short: "Date", group: "core" },
+                      { short: "# Showups", group: "core" },
+                      { short: "Showups MTD", group: "core" },
+                      { short: "Showup Target", group: "core" },
+                      { short: "Showup Attainment", group: "core" },
+                      { short: "# Demos", group: "health" },
+                      { short: "Demos MTD", group: "health" },
+                      { short: "Demo Target", group: "health" },
+                      { short: "Demo Attainment", group: "health" },
+                      { short: "# Closes", group: "engagement" },
+                      { short: "Closes MTD", group: "engagement" },
+                      { short: "Close Target TD", group: "engagement" },
+                      { short: "Close Target", group: "engagement" },
+                      { short: "Close Attainment", group: "engagement" },
+                      { short: "ARR Closed", group: "burner" },
+                      { short: "ARR MTD", group: "burner" },
+                      { short: "ARR Target TD", group: "burner" },
+                      { short: "ARR Target", group: "burner" },
+                      { short: "ARR Attainment", group: "burner" },
+                      { short: "Days Gone", group: "lift" },
+                    ].map((col) => (
+                      <th key={col.short}
+                        className={`px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 ${
+                          col.group === "core" ? "border-l-blue-500/50" :
+                          col.group === "health" ? "border-l-amber-500/50" :
+                          col.group === "engagement" ? "border-l-emerald-500/50" :
+                          col.group === "burner" ? "border-l-violet-500/50" :
+                          "border-l-rose-500/50"
+                        }`}>
+                        {col.short}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {aeRows.length === 0 && !aeLoading && (
+                    <tr><td colSpan={20} className="text-center text-white/15 py-20 text-[12px]">No data.</td></tr>
+                  )}
+                  {aeRows.map((r, i) => {
+                    const renderAtt = (val: number) => {
+                      const color = val >= 100 ? "text-emerald-400" : val >= 80 ? "text-amber-400" : "text-rose-400";
+                      return <span className={`font-semibold ${color}`}>{val}%</span>;
+                    };
+                    return (
+                      <tr key={r.date}
+                        className={`hover:bg-white/[0.025] transition-colors ${i % 2 !== 0 ? "bg-white/[0.008]" : ""}`}>
+                        <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-blue-500/50"><span className="font-mono text-[11px] text-white/60">{r.date}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50"><span className="text-white/75">{r.showups}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50"><span className="text-white/75">{r.showups_mtd}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50"><span className="text-white/40">{r.showup_target}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50">{renderAtt(r.showup_attainment)}</td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50"><span className="text-white/75">{r.demos}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50"><span className="text-white/75">{r.demos_mtd}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50"><span className="text-white/40">{r.demo_target}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50">{renderAtt(r.demo_attainment)}</td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50"><span className="text-white/75">{r.closes}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50"><span className="text-white/75">{r.closes_mtd}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50"><span className="text-white/40">{r.closes_target_till_date}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50"><span className="text-white/40">{r.closes_target}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50">{renderAtt(r.close_attainment)}</td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50"><span className="text-white/75">${r.arr.toLocaleString()}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50"><span className="text-white/75">${r.arr_mtd.toLocaleString()}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50"><span className="text-white/40">${r.arr_target_till_date.toLocaleString()}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50"><span className="text-white/40">${r.arr_target.toLocaleString()}</span></td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50">{renderAtt(r.arr_attainment)}</td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-rose-500/50"><span className="text-white/50">{r.working_days_gone} / 22</span></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
