@@ -15,7 +15,7 @@ const DEMO_PLAN_TARGETS = [
   477, 500,
 ];
 
-// New contacts loaded: hardcoded Apr 1–13
+// New contacts loaded: hardcoded Apr 1–14
 const NEW_CONTACTS_MAP: Record<string, number> = {
   "2026-04-01": 4758,
   "2026-04-02": 3498,
@@ -26,6 +26,8 @@ const NEW_CONTACTS_MAP: Record<string, number> = {
   "2026-04-09": 3100,
   "2026-04-10": 3100,
   "2026-04-13": 3100,
+  "2026-04-14": 2958,
+  "2026-04-15": 2248,
 };
 
 const MONTHLY_MAX_CONTACTS = 79000;
@@ -130,7 +132,7 @@ export async function GET() {
     }
 
     // Sort ascending to calculate running totals
-    const sortedRows = [...result.rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const sortedForMtd = [...result.rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
     let showupsMtd = 0;
     let uniqueContactsMtd = 0;
     let demosScheduledMtd = 0;
@@ -143,7 +145,7 @@ export async function GET() {
       working_days_gone: number; pct_working_days: number;
     }> = {};
 
-    for (const r of sortedRows) {
+    for (const r of sortedForMtd) {
       const dateStr = String(r.date);
       const dayShowups = showupsMap[dateStr] ?? 0;
       showupsMtd += dayShowups;
