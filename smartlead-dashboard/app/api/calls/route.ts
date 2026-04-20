@@ -20,6 +20,9 @@ const NEW_CONTACTS_MAP: Record<string, number> = {
   "2026-04-13": 3100,
   "2026-04-14": 2958,
   "2026-04-15": 2248,
+  "2026-04-16": 1724,
+  "2026-04-17": 3081,
+  "2026-04-18": 3393,
 };
 
 const MONTHLY_MAX_CONTACTS = 79000;
@@ -68,6 +71,7 @@ export async function GET() {
         demos
       FROM daily_logs
       WHERE date < CURRENT_DATE
+        AND EXTRACT(DOW FROM date) NOT IN (0, 6)
       ORDER BY date DESC
     `);
 
@@ -111,11 +115,15 @@ export async function GET() {
     const demosScheduledResult = await client.query(`
       SELECT
         demo_scheduled_date::date AS date,
-        COUNT(*) AS demos_scheduled
-      FROM gist.gtm_demo_bookings
-      WHERE demo_scheduled_date IS NOT NULL
-        AND demo_scheduled_date::date >= '2026-04-14'
-        AND demo_scheduled_date::date < CURRENT_DATE
+        COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos_scheduled
+      FROM (
+        SELECT account_name, demo_scheduled_date,
+          ROW_NUMBER() OVER (PARTITION BY LOWER(TRIM(account_name)) ORDER BY demo_scheduled_date DESC) AS rn
+        FROM gist.gtm_demo_bookings
+        WHERE demo_scheduled_date IS NOT NULL
+          AND demo_scheduled_date::date >= '2026-04-14'
+          AND demo_scheduled_date::date < CURRENT_DATE
+      ) t WHERE rn = 1
       GROUP BY 1
       ORDER BY 1
     `);
@@ -145,7 +153,7 @@ export async function GET() {
       const newContacts = NEW_CONTACTS_MAP[dateStr] ?? 0;
       uniqueContactsMtd += Number(r.unique_dials);
 
-      const dayDemosScheduled = Number(r.demos) || 0;
+      const dayDemosScheduled = demosScheduledMap[dateStr] ?? 0;
       demosScheduledMtd += dayDemosScheduled;
 
       const showupTarget = SHOWUP_TARGETS[dayIndex] ?? SHOWUP_TARGETS[SHOWUP_TARGETS.length - 1];
@@ -192,7 +200,7 @@ export async function GET() {
         monthly_max_contacts: MONTHLY_MAX_CONTACTS,
         pct_contacts_used: Number(((c.unique_contacts_mtd / MONTHLY_MAX_CONTACTS) * 100).toFixed(2)),
         demos: demos,
-        demos_scheduled: demos,
+        demos_scheduled: demosScheduled,
         demos_scheduled_mtd: c.demos_scheduled_mtd,
         demo_plan: 463,
         demo_attainment: Number(((c.demos_scheduled_mtd / 463) * 100).toFixed(2)),
