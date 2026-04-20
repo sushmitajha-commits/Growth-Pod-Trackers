@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
       ),
       inbox_metrics AS (
         SELECT custom_tracking_domain,
-          CASE WHEN daily_sent_count >= message_per_day AND message_per_day IS NOT NULL THEN 1 ELSE 0 END AS is_at_capacity,
+          CASE WHEN message_per_day=50 AND message_per_day IS NOT NULL THEN 1 ELSE 0 END AS is_at_capacity,
           warmup_reputation
         FROM base
       ),
@@ -194,41 +194,6 @@ export async function GET(req: NextRequest) {
       `,
       [from, to]
     );
-
-    // Unique demos per call_date from gtm_demo_bookings (one per account)
-    const demoBookingsCount = await client.query(
-      `
-      SELECT
-        call_date::date AS call_date,
-        COUNT(DISTINCT LOWER(TRIM(account_name))) AS total_demos
-      FROM gist.gtm_demo_bookings
-      WHERE call_date IS NOT NULL
-        AND call_date::date >= $1::date AND call_date::date <= $2::date
-      GROUP BY call_date::date
-      `,
-      [from, to]
-    );
-
-    const unifiedDemoCountMap: Record<string, number> = {};
-    for (const r of demoBookingsCount.rows) {
-      unifiedDemoCountMap[String(r.call_date)] = Number(r.total_demos);
-    }
-
-    // Override demo counts: keep burner/non-burner ratio from call logs, scale to unified total
-    for (const r of callsResult.rows) {
-      const d = String(r.call_date);
-      const callBurner = Number(r.burner_demos);
-      const callNonBurner = Number(r.non_burner_demos);
-      const callTotal = callBurner + callNonBurner;
-      const unifiedTotal = unifiedDemoCountMap[d] || callTotal;
-
-      if (callTotal > 0) {
-        r.burner_demos = Math.round(callBurner * (unifiedTotal / callTotal));
-        r.non_burner_demos = unifiedTotal - r.burner_demos;
-      } else {
-        r.non_burner_demos = unifiedTotal;
-      }
-    }
 
     // 5) Total unique leads with >=2 opens across entire date range (for summary card)
     const uniqueOpensResult = await client.query(
@@ -298,9 +263,6 @@ export async function GET(req: NextRequest) {
         target_emails_sent: target,
         attainment,
         bounce_rate: Number(r.bounce_rate),
-        inboxes_at_capacity: Number(health.inboxes_at_capacity) || 0,
-        domains_at_capacity: Number(health.domains_at_capacity) || 0,
-        domains_above_reputation: Number(health.domains_above_reputation) || 0,
         emails_2plus_opens: Number(r.emails_2plus_opens),
         open_2plus_rate: Number(r.open_2plus_rate),
         unique_2plus_no_call: noCallMap[dateStr] ?? 0,
