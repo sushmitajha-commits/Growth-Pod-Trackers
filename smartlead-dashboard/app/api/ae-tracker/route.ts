@@ -35,15 +35,24 @@ export async function GET() {
       ORDER BY 1
     `);
 
-    // Demos per day (demo_bookings by demo_scheduled_date)
+    // Demos scheduled per day — hardcoded Apr 1-13, DB from Apr 14 (distinct, latest per account)
+    const demosScheduledHardcoded: Record<string, number> = {
+      "2026-04-01": 28, "2026-04-02": 19, "2026-04-03": 13,
+      "2026-04-06": 24, "2026-04-07": 27, "2026-04-08": 25,
+      "2026-04-09": 21, "2026-04-10": 28, "2026-04-13": 21,
+    };
     const demosResult = await client.query(`
       SELECT
         demo_scheduled_date::date AS date,
         COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos
-      FROM gist.gtm_demo_bookings
-      WHERE demo_scheduled_date IS NOT NULL
-        AND demo_scheduled_date::date >= DATE_TRUNC('month', CURRENT_DATE)::date
-        AND demo_scheduled_date::date < CURRENT_DATE
+      FROM (
+        SELECT account_name, demo_scheduled_date,
+          ROW_NUMBER() OVER (PARTITION BY LOWER(TRIM(account_name)) ORDER BY demo_scheduled_date DESC) AS rn
+        FROM gist.gtm_demo_bookings
+        WHERE demo_scheduled_date IS NOT NULL
+          AND demo_scheduled_date::date >= '2026-04-14'
+          AND demo_scheduled_date::date < CURRENT_DATE
+      ) t WHERE rn = 1
       GROUP BY 1
       ORDER BY 1
     `);
@@ -101,19 +110,13 @@ export async function GET() {
           LOWER(REGEXP_REPLACE(SPLIT_PART(REPLACE(REPLACE(COALESCE(primary_domain,website_url,''),'https://',''),'http://',''),'/','1'),'^www\\.','')) AS domain
         FROM gist.gtm_demo_bookings WHERE COALESCE(primary_domain,website_url,'') <> ''
       ),
-      smartlead_domains AS (
-        SELECT DISTINCT
-          LOWER(REGEXP_REPLACE(SPLIT_PART(REPLACE(REPLACE(lead_website,'https://',''),'http://',''),'/','1'),'^www\\.','')) AS domain
-        FROM gist.gtm_smartlead_leads WHERE lead_website IS NOT NULL AND TRIM(lead_website) <> ''
-      ),
       manual_domains AS (
-        SELECT unnest(ARRAY['deipower.com','thewindscreenfactory.net']) AS domain
+        SELECT unnest(ARRAY['deipower.com','thewindscreenfactory.net','krupa-services.com']) AS domain
       ),
       all_outbound AS (
         SELECT domain FROM email_domains WHERE domain <> ''
         UNION SELECT domain FROM phone_domains WHERE domain <> ''
         UNION SELECT domain FROM booking_domains WHERE domain <> ''
-        UNION SELECT domain FROM smartlead_domains WHERE domain <> ''
         UNION SELECT domain FROM manual_domains
       )
       SELECT o.onboarding_date AS date, o.ae, o.domain, o.monthly_price AS price
@@ -128,8 +131,8 @@ export async function GET() {
       showupsMap[String(r.date)] = Number(r.showups);
     }
 
-    // Build demos map
-    const demosMap: Record<string, number> = {};
+    // Build demos map (hardcoded + DB)
+    const demosMap: Record<string, number> = { ...demosScheduledHardcoded };
     for (const r of demosResult.rows) {
       demosMap[String(r.date)] = Number(r.demos);
     }
@@ -137,6 +140,7 @@ export async function GET() {
     // Manual closes (no onboarding date in DB)
     const manualCloses = [
       { date: "2026-04-16", domain: "lasermetalfab.com", ae: "arabind.mishra@gushwork.ai", price: 400 },
+      { date: "2026-04-20", domain: "krupa-services.com", ae: "abhinav.chaturvedi@gushwork.ai", price: 520 },
     ];
 
     // Build closes + ARR per day
@@ -149,13 +153,18 @@ export async function GET() {
       closesMap[d].arr += price * 12;
     }
 
-    // Collect all dates
+    // Collect all working days (Mon-Fri only)
     const allDates = new Set<string>();
     for (const d of Object.keys(showupsMap)) allDates.add(d);
     for (const d of Object.keys(demosMap)) allDates.add(d);
     for (const d of Object.keys(closesMap)) allDates.add(d);
 
-    const sortedDates = Array.from(allDates).sort();
+    const isWeekday = (d: string) => {
+      const day = new Date(d + "T12:00:00").getDay();
+      return day !== 0 && day !== 6;
+    };
+
+    const sortedDates = Array.from(allDates).filter(isWeekday).sort();
 
     const t = getTargets();
     let showupsMtd = 0;
@@ -195,12 +204,12 @@ export async function GET() {
         closes_mtd: closesMtd,
         closes_target_till_date: closesTargetTillDate,
         closes_target: t.closes,
-        close_attainment: closesTargetTillDate > 0 ? Number(((closesMtd / closesTargetTillDate) * 100).toFixed(2)) : 0,
+        close_attainment: t.closes > 0 ? Number(((closesMtd / t.closes) * 100).toFixed(2)) : 0,
         arr: dayArr,
         arr_mtd: arrMtd,
         arr_target_till_date: arrTargetTillDate,
         arr_target: t.arr,
-        arr_attainment: arrTargetTillDate > 0 ? Number(((arrMtd / arrTargetTillDate) * 100).toFixed(2)) : 0,
+        arr_attainment: t.arr > 0 ? Number(((arrMtd / t.arr) * 100).toFixed(2)) : 0,
         working_days_gone: dayIndex,
         pct_working_days: Number(((dayIndex / t.workingDays) * 100).toFixed(1)),
       };
