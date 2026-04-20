@@ -117,29 +117,7 @@ export async function GET(req: NextRequest) {
       `,
       [from, to]
     );
-
-    // 3) Email health snapshot
-    const healthResult = await client.query(`
-      WITH base AS (
-        SELECT * FROM gist.burner_email_health
-        WHERE custom_tracking_domain NOT LIKE '%gush%'
-      ),
-      inbox_metrics AS (
-        SELECT custom_tracking_domain,
-          CASE WHEN message_per_day=50 AND message_per_day IS NOT NULL THEN 1 ELSE 0 END AS is_at_capacity,
-          warmup_reputation
-        FROM base
-      ),
-      domain_metrics AS (
-        SELECT custom_tracking_domain, COUNT(*) AS total_inboxes,
-          SUM(is_at_capacity) AS inboxes_at_capacity, AVG(warmup_reputation) AS avg_reputation
-        FROM inbox_metrics GROUP BY custom_tracking_domain
-      )
-      SELECT
-        (SELECT SUM(is_at_capacity) FROM inbox_metrics) AS inboxes_at_capacity,
-        (SELECT COUNT(*) FROM domain_metrics WHERE inboxes_at_capacity > 0) AS domains_at_capacity,
-        (SELECT COUNT(*) FROM domain_metrics WHERE avg_reputation >= 90) AS domains_above_reputation
-    `);
+    const healthResult = { rows: [{}] };
 
     // 4) Burner vs Non-Burner calls + demos
     const callsResult = await client.query(
