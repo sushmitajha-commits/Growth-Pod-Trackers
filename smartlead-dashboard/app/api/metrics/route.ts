@@ -117,6 +117,8 @@ export async function GET(req: NextRequest) {
       `,
       [from, to]
     );
+
+    // 3) Email health snapshot — disabled (columns removed)
     const healthResult = { rows: [{}] };
 
     // 4) Burner vs Non-Burner calls + demos
