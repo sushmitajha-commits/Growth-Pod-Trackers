@@ -27,6 +27,50 @@ type EmailRow = {
   difference: number | null;
 };
 
+const EMAILS_PER_PROSPECT = 12;
+const TOTAL_LEADS_IN_REPO = 351533; // 275,875 smartlead + 75,658 master-only
+
+// Email 1-12 mapped to campaign type sequences
+// Yet to receive = total repo - leads who received that sequence
+const EMAIL_SEQUENCE_MAP = [
+  { email: 1,  type: "Type 1", seq: 1, received: 275875, yetToReceive: 75658 },
+  { email: 2,  type: "Type 1", seq: 2, received: 252594, yetToReceive: 98939 },
+  { email: 3,  type: "Type 1", seq: 3, received: 242597, yetToReceive: 108936 },
+  { email: 4,  type: "Type 2", seq: 1, received: 214841, yetToReceive: 136692 },
+  { email: 5,  type: "Type 2", seq: 2, received: 191502, yetToReceive: 160031 },
+  { email: 6,  type: "Type 2", seq: 3, received: 130675, yetToReceive: 220858 },
+  { email: 7,  type: "Type 2", seq: 4, received: 125085, yetToReceive: 226448 },
+  { email: 8,  type: "Type 2", seq: 5, received: 114561, yetToReceive: 236972 },
+  { email: 9,  type: "Type 2", seq: 6, received: 105499, yetToReceive: 246034 },
+  { email: 10, type: "Type 3", seq: 1, received: 134400, yetToReceive: 217133 },
+  { email: 11, type: "Type 3", seq: 2, received: 115277, yetToReceive: 236256 },
+  { email: 12, type: "Type 3", seq: 3, received: 75162,  yetToReceive: 276371 },
+];
+
+const TOTAL_SMARTLEAD = 275875;
+const MASTER_ONLY = 75658;
+
+const TYPE1_FUNNEL = [
+  { seq: 1, received: 275875, total: 275875 },
+  { seq: 2, received: 252594, total: 275875 },
+  { seq: 3, received: 242597, total: 275875 },
+];
+
+const TYPE2_FUNNEL = [
+  { seq: 1, received: 214841, total: 217760 },
+  { seq: 2, received: 191502, total: 217760 },
+  { seq: 3, received: 130675, total: 217760 },
+  { seq: 4, received: 125085, total: 217760 },
+  { seq: 5, received: 114561, total: 217760 },
+  { seq: 6, received: 105499, total: 217760 },
+];
+
+const TYPE3_FUNNEL = [
+  { seq: 1, received: 134400, total: 134580 },
+  { seq: 2, received: 115277, total: 134580 },
+  { seq: 3, received: 75162, total: 134580 },
+];
+
 type CallRow = {
   date: string;
   total_calls: number;
@@ -139,7 +183,7 @@ export default function Dashboard() {
   const today = new Date().toISOString().split("T")[0];
   const monthStart = currentMonthStart();
 
-  const [tab, setTab] = useState<"email" | "calls" | "ae">("email");
+  const [tab, setTab] = useState<"email" | "calls" | "funnel" | "capacity" | "demos" | "closes">("email");
 
   const [from, setFrom]             = useState(monthStart);
   const [to, setTo]                 = useState(today);
@@ -153,10 +197,18 @@ export default function Dashboard() {
   const [callError, setCallError]   = useState<string | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [aeRows, setAeRows] = useState<any[]>([]);
-  const [aeLoading, setAeLoading] = useState(false);
-  const [aeError, setAeError] = useState<string | null>(null);
+  const [demoBookings, setDemoBookings] = useState<any[]>([]);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [demoTotal, setDemoTotal] = useState(0);
+  const [demoDateFilter, setDemoDateFilter] = useState<string>("all");
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [closesRows, setClosesRows] = useState<any[]>([]);
+  const [closesLoading, setClosesLoading] = useState(false);
+  const [closesError, setClosesError] = useState<string | null>(null);
+  const [closesMonthFilter, setClosesMonthFilter] = useState<string>("all");
+  const [closesSourceFilter, setClosesSourceFilter] = useState<string>("all");
 
 
   const fetchEmail = useCallback(async () => {
@@ -212,23 +264,40 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { fetchEmail(); }, [fetchEmail]);
-  const fetchAe = useCallback(async () => {
-    setAeLoading(true);
-    setAeError(null);
+  const fetchDemos = useCallback(async () => {
+    setDemoLoading(true);
+    setDemoError(null);
     try {
-      const res = await fetch("/api/ae-tracker");
+      const res = await fetch("/api/demo-bookings");
       const json = await res.json();
       if (json.error) throw new Error(json.error);
-      setAeRows(json.rows);
+      setDemoBookings(json.bookings);
+      setDemoTotal(json.totalBookings);
     } catch (e: unknown) {
-      setAeError(e instanceof Error ? e.message : "Unknown error");
+      setDemoError(e instanceof Error ? e.message : "Unknown error");
     } finally {
-      setAeLoading(false);
+      setDemoLoading(false);
+    }
+  }, []);
+
+  const fetchCloses = useCallback(async () => {
+    setClosesLoading(true);
+    setClosesError(null);
+    try {
+      const res = await fetch("/api/closes");
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setClosesRows(json.rows);
+    } catch (e: unknown) {
+      setClosesError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setClosesLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchCalls(); }, [fetchCalls]);
-  useEffect(() => { fetchAe(); }, [fetchAe]);
+  useEffect(() => { fetchDemos(); }, [fetchDemos]);
+  useEffect(() => { fetchCloses(); }, [fetchCloses]);
 
   /* ─── Summary stats ─── */
   const emailSummary = emailRows.length > 0 ? {
@@ -316,11 +385,23 @@ export default function Dashboard() {
             }`}>
             Cold Calling
           </button>
-          <button onClick={() => setTab("ae")}
+          <button onClick={() => setTab("funnel")}
             className={`px-5 py-2 rounded-lg text-[12px] font-medium transition-all duration-200 ${
-              tab === "ae" ? "bg-white/[0.08] text-white" : "text-white/30 hover:text-white/50"
+              tab === "funnel" ? "bg-white/[0.08] text-white" : "text-white/30 hover:text-white/50"
             }`}>
-            Daily AE Tracker
+            Email Capacity
+          </button>
+          <button onClick={() => setTab("capacity")}
+            className={`px-5 py-2 rounded-lg text-[12px] font-medium transition-all duration-200 ${
+              tab === "capacity" ? "bg-white/[0.08] text-white" : "text-white/30 hover:text-white/50"
+            }`}>
+            Campaign Funnel
+          </button>
+          <button onClick={() => setTab("demos")}
+            className={`px-5 py-2 rounded-lg text-[12px] font-medium transition-all duration-200 ${
+              tab === "demos" ? "bg-white/[0.08] text-white" : "text-white/30 hover:text-white/50"
+            }`}>
+            Demo Bookings
           </button>
         </div>
 
@@ -395,117 +476,348 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ─── Daily AE Tracker Tab ─── */}
-        {tab === "ae" && (
-          <>
-            {aeRows.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
-                <StatCard label="Show-ups MTD" value={aeRows[0]?.showups_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.showup_attainment ?? 0}% of ${aeRows[0]?.showup_target ?? 250}`} color="blue" />
-                <StatCard label="Demos MTD" value={aeRows[0]?.demos_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.demo_attainment ?? 0}% of ${aeRows[0]?.demo_target ?? 550}`} color="emerald" />
-                <StatCard label="Closes MTD" value={aeRows[0]?.closes_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.close_attainment ?? 0}% attainment`} color="amber" />
-                <StatCard label="ARR Closed MTD" value={`$${(aeRows[0]?.arr_mtd ?? 0).toLocaleString()}`} sub={`${aeRows[0]?.arr_attainment ?? 0}% attainment`} color="violet" />
-                <StatCard label="Working Days" value={`${aeRows[0]?.working_days_gone ?? 0} / 22`} sub={`${aeRows[0]?.pct_working_days ?? 0}% gone`} color="blue" />
-              </div>
-            )}
+        {/* ─── Email Capacity Tab ─── */}
+        {tab === "funnel" && (() => {
+          const totalEmailsLeft = EMAIL_SEQUENCE_MAP.reduce((s, d) => s + d.yetToReceive, 0);
+          const zeroEmailLeads = MASTER_ONLY;
 
-            <div className="flex items-center gap-2.5 mb-6">
-              <div className="bg-white/[0.02] rounded-lg px-3 py-1.5">
-                <span className="text-[9px] text-white/20 uppercase tracking-[0.15em] font-semibold">Current Month to Date</span>
+          return (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+                <StatCard label="Total Leads in Repo" value={TOTAL_LEADS_IN_REPO.toLocaleString()} sub="smartlead + master-only" color="blue" />
+                <StatCard label="Emails per Prospect" value={String(EMAILS_PER_PROSPECT)} sub="T1: 3 + T2: 6 + T3: 3" color="emerald" />
+                <StatCard label="Zero Emails Received" value={zeroEmailLeads.toLocaleString()} sub="master-only, not in smartlead" color="amber" />
+                <StatCard label="Total Emails Left" value={totalEmailsLeft.toLocaleString()} sub="across all 12 sequences" color="violet" />
+                <StatCard label="Completed All 12" value={(75162).toLocaleString()} sub="received all sequences" color="blue" />
               </div>
-              <button onClick={fetchAe}
+
+              <div className="overflow-x-auto rounded-xl bg-white/[0.015]">
+                <table className="text-[11px] w-full">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-blue-500/50">Email #</th>
+                      <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-cyan-500/50">Campaign Type</th>
+                      <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-cyan-500/50">Sequence</th>
+                      <th className="px-4 py-3 text-right font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-emerald-500/50">Received</th>
+                      <th className="px-4 py-3 text-right font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-amber-500/50">Yet to Receive</th>
+                      <th className="px-4 py-3 text-right font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-violet-500/50">% Received</th>
+                      <th className="px-4 py-3 text-right font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-rose-500/50">Emails Left (Capacity)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Zero emails row */}
+                    <tr className="bg-amber-500/[0.03] hover:bg-white/[0.025] transition-colors">
+                      <td className="px-4 py-2.5 whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50">
+                        <span className="text-amber-400 font-medium">0</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-cyan-500/50">
+                        <span className="text-amber-400/70">{"\u2014"}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-cyan-500/50">
+                        <span className="text-amber-400/70">{"\u2014"}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50">
+                        <span className="text-white/20">0</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50">
+                        <span className="text-amber-400 font-medium">{zeroEmailLeads.toLocaleString()}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50">
+                        <span className="text-rose-400">0%</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-rose-500/50">
+                        <span className="text-amber-400 font-medium">{(zeroEmailLeads * 12).toLocaleString()}</span>
+                      </td>
+                    </tr>
+                    {EMAIL_SEQUENCE_MAP.map((d, i) => {
+                      const pct = ((d.received / TOTAL_LEADS_IN_REPO) * 100).toFixed(1);
+                      const typeColor = d.type === "Type 1" ? "text-emerald-400/70" : d.type === "Type 2" ? "text-amber-400/70" : "text-violet-400/70";
+                      return (
+                        <tr key={d.email}
+                          className={`hover:bg-white/[0.025] transition-colors ${i % 2 === 0 ? "bg-white/[0.008]" : ""}`}>
+                          <td className="px-4 py-2.5 whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50">
+                            <span className="text-white/60 font-medium">{d.email}</span>
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-cyan-500/50">
+                            <span className={typeColor}>{d.type}</span>
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-cyan-500/50">
+                            <span className="text-white/40">Seq {d.seq}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50">
+                            <span className="text-white/75">{d.received.toLocaleString()}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50">
+                            <span className="text-white/75">{d.yetToReceive.toLocaleString()}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50">
+                            <span className={Number(pct) >= 70 ? "text-emerald-400" : Number(pct) >= 40 ? "text-amber-400" : "text-rose-400"}>
+                              {pct}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-rose-500/50">
+                            <span className="text-white/75 font-medium">{d.yetToReceive.toLocaleString()}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="border-t border-white/[0.08] bg-white/[0.02]">
+                      <td colSpan={4} className="px-4 py-3 whitespace-nowrap border-l-2 border-l-blue-500/50">
+                        <span className="text-white/80 font-semibold text-[10px] uppercase tracking-wider">Total Emails Left</span>
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50">
+                        <span className="text-white/90 font-semibold">{(totalEmailsLeft + zeroEmailLeads * 12).toLocaleString()}</span>
+                      </td>
+                      <td className="px-4 py-3 border-l-2 border-l-violet-500/50" />
+                      <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums border-l-2 border-l-rose-500/50">
+                        <span className="text-white/90 font-bold">{(totalEmailsLeft + zeroEmailLeads * 12).toLocaleString()}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 text-[10px] text-white/20">
+                Data as of April 15, 2026. Email 1-3 = Type 1, Email 4-9 = Type 2, Email 10-12 = Type 3. Values are static snapshots.
+              </div>
+            </>
+          );
+        })()}
+
+        {/* ─── Campaign Funnel Tab ─── */}
+        {tab === "capacity" && (() => {
+          const funnels = [
+            { label: "Type 1", color: "emerald", maxSeq: 3, data: TYPE1_FUNNEL },
+            { label: "Type 2", color: "amber", maxSeq: 6, data: TYPE2_FUNNEL },
+            { label: "Type 3", color: "violet", maxSeq: 3, data: TYPE3_FUNNEL },
+          ];
+
+          const t1Left = TYPE1_FUNNEL.reduce((s, f) => s + (f.total - f.received), 0);
+          const t2Left = TYPE2_FUNNEL.reduce((s, f) => s + (f.total - f.received), 0);
+          const t3Left = TYPE3_FUNNEL.reduce((s, f) => s + (f.total - f.received), 0);
+          const masterLeft = MASTER_ONLY * 12;
+          const grandTotalLeft = t1Left + t2Left + t3Left + masterLeft;
+
+          return (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+                <StatCard label="Smartlead Leads" value={TOTAL_SMARTLEAD.toLocaleString()} sub="in campaign stats" color="blue" />
+                <StatCard label="Master-Only Leads" value={MASTER_ONLY.toLocaleString()} sub="not in smartlead, need all 12" color="amber" />
+                <StatCard label="Total Repo" value={(TOTAL_SMARTLEAD + MASTER_ONLY).toLocaleString()} sub="all unique leads" color="emerald" />
+                <StatCard label="Emails per Prospect" value="12" sub="Type1: 3 + Type2: 6 + Type3: 3" color="violet" />
+                <StatCard label="Total Emails Left" value={grandTotalLeft.toLocaleString()} sub="across all types + master" color="blue" />
+              </div>
+
+              {/* Master-only callout */}
+              <div className="bg-amber-500/[0.04] border border-amber-500/10 rounded-xl p-4 mb-6">
+                <div className="text-[10px] uppercase tracking-[0.15em] font-semibold text-amber-400 mb-1">Master-Only Leads</div>
+                <div className="text-[11px] text-white/50">
+                  <span className="text-white/80 font-semibold">{MASTER_ONLY.toLocaleString()}</span> leads from gtm_master (filtered CIDs, max 3 per company) are not in Smartlead yet.
+                  They need all 12 emails = <span className="text-white/80 font-semibold">{masterLeft.toLocaleString()}</span> emails to send.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                {funnels.map((f) => {
+                  const textColor = f.color === "emerald" ? "text-emerald-400" : f.color === "amber" ? "text-amber-400" : "text-violet-400";
+                  const barColor = f.color === "emerald" ? "bg-emerald-500" : f.color === "amber" ? "bg-amber-500" : "bg-violet-500";
+                  const barBg = f.color === "emerald" ? "bg-emerald-500/10" : f.color === "amber" ? "bg-amber-500/10" : "bg-violet-500/10";
+                  const totalInType = f.data[0].total;
+                  const notInType = TOTAL_SMARTLEAD - totalInType;
+                  const typeEmailsLeft = f.data.reduce((s, d) => s + (d.total - d.received), 0);
+                  const notInTypeEmails = notInType * f.maxSeq;
+                  const totalTypeCapacity = typeEmailsLeft + notInTypeEmails;
+
+                  return (
+                    <div key={f.label} className="bg-white/[0.02] rounded-2xl p-6">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className={`text-[11px] uppercase tracking-[0.15em] font-semibold ${textColor}`}>{f.label} Campaign</div>
+                        <span className="text-[10px] text-white/25">{f.maxSeq} sequences</span>
+                      </div>
+                      <div className="text-[10px] text-white/30 mb-4">
+                        {totalInType.toLocaleString()} leads entered &middot; {notInType.toLocaleString()} not yet in this type
+                      </div>
+
+                      <table className="w-full text-[11px] mb-4">
+                        <thead>
+                          <tr className="text-white/25 text-[9px] uppercase tracking-[0.12em]">
+                            <th className="text-left py-2 font-medium">Seq</th>
+                            <th className="text-right py-2 font-medium">Received</th>
+                            <th className="text-right py-2 font-medium">Yet to Receive</th>
+                            <th className="text-right py-2 font-medium">Emails Left</th>
+                            <th className="text-right py-2 font-medium">%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {f.data.map((d) => {
+                            const yetTo = d.total - d.received;
+                            const pct = d.total > 0 ? ((d.received / d.total) * 100).toFixed(1) : "0.0";
+                            return (
+                              <tr key={d.seq} className="border-t border-white/[0.03]">
+                                <td className="py-2.5 text-white/50 font-medium">Email {d.seq}</td>
+                                <td className="py-2.5 text-right text-white/75 tabular-nums">{d.received.toLocaleString()}</td>
+                                <td className="py-2.5 text-right text-white/40 tabular-nums">{yetTo.toLocaleString()}</td>
+                                <td className="py-2.5 text-right tabular-nums">
+                                  <span className="text-white/75 font-medium">{yetTo.toLocaleString()}</span>
+                                </td>
+                                <td className="py-2.5 text-right tabular-nums">
+                                  <span className={Number(pct) >= 80 ? "text-emerald-400" : Number(pct) >= 50 ? "text-amber-400" : "text-rose-400"}>
+                                    {pct}%
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="border-t border-white/[0.06]">
+                            <td className="py-2.5 text-white/30 text-[10px]">Not in type</td>
+                            <td className="py-2.5 text-right text-white/20 tabular-nums">{"\u2014"}</td>
+                            <td className="py-2.5 text-right text-white/40 tabular-nums">{notInType.toLocaleString()}</td>
+                            <td className="py-2.5 text-right tabular-nums">
+                              <span className="text-white/75 font-medium">{notInTypeEmails.toLocaleString()}</span>
+                            </td>
+                            <td className="py-2.5 text-right text-white/20 tabular-nums">{"\u2014"}</td>
+                          </tr>
+                          <tr className="border-t border-white/[0.08] bg-white/[0.02]">
+                            <td className="py-3 text-white/80 font-semibold text-[10px] uppercase tracking-wider">Total</td>
+                            <td className="py-3" />
+                            <td className="py-3" />
+                            <td className="py-3 text-right tabular-nums">
+                              <span className="text-white/90 font-bold">{totalTypeCapacity.toLocaleString()}</span>
+                            </td>
+                            <td className="py-3" />
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Funnel bars */}
+                      <div className="space-y-1.5">
+                        {f.data.map((d) => {
+                          const pct = d.total > 0 ? (d.received / d.total) * 100 : 0;
+                          return (
+                            <div key={d.seq} className="flex items-center gap-2">
+                              <span className="text-[9px] text-white/25 w-5 text-right">{d.seq}</span>
+                              <div className={`flex-1 h-5 rounded ${barBg} overflow-hidden`}>
+                                <div className={`h-full rounded ${barColor} transition-all duration-700`} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-[9px] text-white/30 w-10 text-right">{pct.toFixed(1)}%</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="text-[10px] text-white/20">Data as of April 15, 2026. Values are static snapshots.</div>
+            </>
+          );
+        })()}
+
+        {/* ─── Demo Bookings Tab ─── */}
+        {tab === "demos" && (() => {
+          const filteredBookings = demoDateFilter === "all"
+            ? demoBookings
+            : demoBookings.filter(b => b.call_date === demoDateFilter);
+          const allDates = demoBookings.map(b => String(b.call_date)).filter(d => d && d !== "null");
+          const uniqueDates = allDates.filter((d, i) => allDates.indexOf(d) === i).sort();
+
+          return (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+              <StatCard label="Total Bookings" value={demoTotal.toLocaleString()} sub="this month" color="blue" />
+              <StatCard label="Showing" value={filteredBookings.length.toLocaleString()} sub={demoDateFilter === "all" ? "all dates" : demoDateFilter} color="violet" />
+              <StatCard label="Showed Up" value={filteredBookings.filter(b => b.show_noshow === 'Y').length.toLocaleString()} sub="confirmed" color="emerald" />
+              <StatCard label="No Show / Pending" value={filteredBookings.filter(b => b.show_noshow !== 'Y').length.toLocaleString()} sub="no show or pending" color="amber" />
+            </div>
+
+            <div className="flex items-center gap-2.5 mb-6 flex-wrap">
+              <div className="flex items-center gap-2 bg-white/[0.02] rounded-lg px-3 py-1.5">
+                <label className="text-[9px] text-white/20 uppercase tracking-[0.15em] font-semibold">Call Date</label>
+                <select value={demoDateFilter} onChange={e => setDemoDateFilter(e.target.value)}
+                  className="bg-transparent border-none text-[12px] text-white/60 outline-none cursor-pointer">
+                  <option value="all" className="bg-[#0b0f1a]">All Dates</option>
+                  {uniqueDates.map(d => (
+                    <option key={d} value={d} className="bg-[#0b0f1a]">
+                      {d} ({demoBookings.filter(b => b.call_date === d).length})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button onClick={fetchDemos}
                 className="bg-white/[0.06] hover:bg-white/[0.10] text-white/70 hover:text-white px-4 py-1.5 rounded-lg text-[11px] font-medium transition-all">
                 Refresh
               </button>
-              {aeLoading && (
+              {demoLoading && (
                 <div className="flex items-center gap-1.5 ml-1">
                   <div className="w-3 h-3 border-[1.5px] border-white/10 border-t-white/40 rounded-full animate-spin" />
                 </div>
               )}
             </div>
 
-            {aeError && (
-              <div className="bg-rose-500/5 text-rose-300/80 rounded-xl p-3 mb-5 text-[11px]">{aeError}</div>
+            {demoError && (
+              <div className="bg-rose-500/5 text-rose-300/80 rounded-xl p-3 mb-5 text-[11px]">{demoError}</div>
             )}
 
             <div className="overflow-x-auto rounded-xl bg-white/[0.015]">
               <table className="text-[11px] w-max">
                 <thead>
                   <tr>
-                    {[
-                      { short: "Date", group: "core" },
-                      { short: "# Showups", group: "core" },
-                      { short: "Showups MTD", group: "core" },
-                      { short: "Showup Target", group: "core" },
-                      { short: "Showup Attainment", group: "core" },
-                      { short: "# Demos", group: "health" },
-                      { short: "Demos MTD", group: "health" },
-                      { short: "Demo Target", group: "health" },
-                      { short: "Demo Attainment", group: "health" },
-                      { short: "# Closes", group: "engagement" },
-                      { short: "Closes MTD", group: "engagement" },
-                      { short: "Close Target TD", group: "engagement" },
-                      { short: "Close Target", group: "engagement" },
-                      { short: "Close Attainment", group: "engagement" },
-                      { short: "ARR Closed", group: "burner" },
-                      { short: "ARR MTD", group: "burner" },
-                      { short: "ARR Target TD", group: "burner" },
-                      { short: "ARR Target", group: "burner" },
-                      { short: "ARR Attainment", group: "burner" },
-                      { short: "Days Gone", group: "lift" },
-                    ].map((col) => (
-                      <th key={col.short}
-                        className={`px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 ${
-                          col.group === "core" ? "border-l-blue-500/50" :
-                          col.group === "health" ? "border-l-amber-500/50" :
-                          col.group === "engagement" ? "border-l-emerald-500/50" :
-                          col.group === "burner" ? "border-l-violet-500/50" :
-                          "border-l-rose-500/50"
-                        }`}>
-                        {col.short}
-                      </th>
-                    ))}
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-blue-500/50">Demo Date</th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-blue-500/50">Call Date</th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-emerald-500/50">Company</th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-emerald-500/50">Attendee</th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-amber-500/50">Website</th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-violet-500/50">SDR</th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-violet-500/50">AE</th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-rose-500/50">Show/No-Show</th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap text-white/25 text-[9px] uppercase tracking-[0.12em] border-l-2 border-l-cyan-500/50">Campaign</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {aeRows.length === 0 && !aeLoading && (
-                    <tr><td colSpan={20} className="text-center text-white/15 py-20 text-[12px]">No data.</td></tr>
+                  {filteredBookings.length === 0 && !demoLoading && (
+                    <tr><td colSpan={9} className="text-center text-white/15 py-20 text-[12px]">No bookings{demoDateFilter !== "all" ? ` on ${demoDateFilter}` : " this month"}.</td></tr>
                   )}
-                  {aeRows.map((r, i) => {
-                    const renderAtt = (val: number) => {
-                      const color = val >= 100 ? "text-emerald-400" : val >= 80 ? "text-amber-400" : "text-rose-400";
-                      return <span className={`font-semibold ${color}`}>{val}%</span>;
-                    };
-                    return (
-                      <tr key={r.date}
-                        className={`hover:bg-white/[0.025] transition-colors ${i % 2 !== 0 ? "bg-white/[0.008]" : ""}`}>
-                        <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-blue-500/50"><span className="font-mono text-[11px] text-white/60">{r.date}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50"><span className="text-white/75">{r.showups}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50"><span className="text-white/75">{r.showups_mtd}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50"><span className="text-white/40">{r.showup_target}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-blue-500/50">{renderAtt(r.showup_attainment)}</td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50"><span className="text-white/75">{r.demos}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50"><span className="text-white/75">{r.demos_mtd}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50"><span className="text-white/40">{r.demo_target}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-amber-500/50">{renderAtt(r.demo_attainment)}</td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50"><span className="text-white/75">{r.closes}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50"><span className="text-white/75">{r.closes_mtd}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50"><span className="text-white/40">{r.closes_target_till_date}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50"><span className="text-white/40">{r.closes_target}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-emerald-500/50">{renderAtt(r.close_attainment)}</td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50"><span className="text-white/75">${r.arr.toLocaleString()}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50"><span className="text-white/75">${r.arr_mtd.toLocaleString()}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50"><span className="text-white/40">${r.arr_target_till_date.toLocaleString()}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50"><span className="text-white/40">${r.arr_target.toLocaleString()}</span></td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-violet-500/50">{renderAtt(r.arr_attainment)}</td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums border-l-2 border-l-rose-500/50"><span className="text-white/50">{r.working_days_gone} / 22</span></td>
-                      </tr>
-                    );
-                  })}
+                  {filteredBookings.map((b, i) => (
+                    <tr key={i}
+                      className={`hover:bg-white/[0.025] transition-colors ${i % 2 !== 0 ? "bg-white/[0.008]" : ""}`}>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-blue-500/50">
+                        <span className="font-mono text-[11px] text-white/60">{b.demo_date}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-blue-500/50">
+                        <span className="font-mono text-[11px] text-white/40">{b.call_date || "\u2014"}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-emerald-500/50">
+                        <span className="text-white/75">{b.account_name}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-emerald-500/50">
+                        <span className="text-white/50">{b.attendee_name}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-amber-500/50">
+                        <span className="text-white/40">{b.website}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-violet-500/50">
+                        <span className="text-white/50">{b.sdr}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-violet-500/50">
+                        <span className="text-white/50">{b.ae}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-rose-500/50">
+                        <span className={b.show_noshow === 'Y' ? "text-emerald-400" : b.show_noshow === 'N' ? "text-rose-400" : "text-white/25"}>
+                          {b.show_noshow === 'Y' ? "Showed" : b.show_noshow === 'N' ? "No Show" : b.show_noshow === 'R' ? "Rescheduled" : "\u2014"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap border-l-2 border-l-cyan-500/50">
+                        <span className="text-white/30">{b.campaign_id}</span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </>
-        )}
+          );
+        })()}
 
         {/* ─── Cold Calling Tab ─── */}
         {tab === "calls" && (
