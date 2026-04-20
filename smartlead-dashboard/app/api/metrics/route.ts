@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
         ROUND(100.0 * COUNT(DISTINCT lead_email) FILTER (WHERE open_count >= 2)
           / NULLIF(COUNT(DISTINCT lead_email), 0), 2) AS open_2plus_rate
       FROM base
+      WHERE EXTRACT(DOW FROM (sent_time AT TIME ZONE 'America/Los_Angeles')::date) NOT IN (0, 6)
       GROUP BY 1
       ORDER BY 1 DESC
       `,
