@@ -25,7 +25,7 @@ type EmailRow = {
 };
 
 type CallRow = {
-  date: string;
+  date: string;route
   total_calls: number;
   calls_mtd: number;
   target: number;
@@ -506,7 +506,7 @@ export default function Dashboard() {
           <>
             {callSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                <StatCard label="Calls MTD" value={callSummary.callsMtd.toLocaleString()} sub={`${callSummary.callsAttainment}% of 100K target`} color="blue" />
+                <StatCard label="Calls MTD" value={callSummary.callsMtd.toLocaleString()} sub={`${callSummary.callsAttainment}% of 92.4K target`} color="blue" />
                 <StatCard label="Demos Scheduled MTD" value={callSummary.demoScheduledMtd.toLocaleString()} sub={`${callSummary.demoAttainment}% of 463 target`} color="amber" />
                 <StatCard label="Showups MTD" value={callSummary.showupsMtd.toLocaleString()} sub={`${callSummary.showupAttainment}% of 185 target`} color="emerald" />
                 <StatCard label="Showup Attainment" value={`${callSummary.showupAttainment}%`} sub="vs 185 plan" color="violet" />
