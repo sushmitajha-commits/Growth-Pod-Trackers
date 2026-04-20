@@ -54,13 +54,13 @@ export async function GET() {
           ORDER BY date
           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
         ) AS calls_mtd,
-        100000 AS target,
+        92400 AS target,
         ROUND(
           SUM(total_calls) OVER (
             PARTITION BY DATE_TRUNC('month', date)
             ORDER BY date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-          )::numeric / 100000 * 100, 2
+          )::numeric / 92400 * 100, 2
         ) AS attainment,
         sales_dialer_calls,
         justcall_calls,
@@ -145,7 +145,7 @@ export async function GET() {
       const newContacts = NEW_CONTACTS_MAP[dateStr] ?? 0;
       uniqueContactsMtd += Number(r.unique_dials);
 
-      const dayDemosScheduled = demosScheduledMap[dateStr] ?? 0;
+      const dayDemosScheduled = Number(r.demos) || 0;
       demosScheduledMtd += dayDemosScheduled;
 
       const showupTarget = SHOWUP_TARGETS[dayIndex] ?? SHOWUP_TARGETS[SHOWUP_TARGETS.length - 1];
