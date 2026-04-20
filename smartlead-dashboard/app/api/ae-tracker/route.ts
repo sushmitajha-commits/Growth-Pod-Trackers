@@ -3,11 +3,18 @@ import pool from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const SHOWUP_TARGET = 250;
-const DEMO_TARGET = 550;
-const CLOSES_TARGET = 40;
-const ARR_TARGET = 384000;
-const TOTAL_WORKING_DAYS = 22;
+// Monthly targets from Growth Targets vs Actuals
+const MONTHLY_TARGETS: Record<string, {
+  showups: number; demos: number; closes: number; arr: number; workingDays: number;
+}> = {
+  "2026-04": { showups: 185, demos: 463, closes: 19, arr: 155952, workingDays: 22 },
+  "2026-05": { showups: 148, demos: 370, closes: 17, arr: 141038, workingDays: 21 },
+};
+
+function getTargets() {
+  const month = new Date().toISOString().substring(0, 7);
+  return MONTHLY_TARGETS[month] || MONTHLY_TARGETS["2026-04"];
+}
 
 export async function GET() {
   const client = await pool.connect();
@@ -150,6 +157,7 @@ export async function GET() {
 
     const sortedDates = Array.from(allDates).sort();
 
+    const t = getTargets();
     let showupsMtd = 0;
     let demosMtd = 0;
     let closesMtd = 0;
@@ -168,33 +176,33 @@ export async function GET() {
       arrMtd += dayArr;
       dayIndex++;
 
-      const showupTargetTillDate = Math.round((SHOWUP_TARGET / TOTAL_WORKING_DAYS) * dayIndex);
-      const demoTargetTillDate = Math.round((DEMO_TARGET / TOTAL_WORKING_DAYS) * dayIndex);
-      const closesTargetTillDate = Math.round((CLOSES_TARGET / TOTAL_WORKING_DAYS) * dayIndex);
-      const arrTargetTillDate = Math.round((ARR_TARGET / TOTAL_WORKING_DAYS) * dayIndex);
+      const showupTargetTillDate = Math.round((t.showups / t.workingDays) * dayIndex);
+      const demoTargetTillDate = Math.round((t.demos / t.workingDays) * dayIndex);
+      const closesTargetTillDate = Math.round((t.closes / t.workingDays) * dayIndex);
+      const arrTargetTillDate = Math.round((t.arr / t.workingDays) * dayIndex);
 
       return {
         date,
         showups: dayShowups,
         showups_mtd: showupsMtd,
-        showup_target: SHOWUP_TARGET,
-        showup_attainment: SHOWUP_TARGET > 0 ? Number(((showupsMtd / SHOWUP_TARGET) * 100).toFixed(2)) : 0,
+        showup_target: t.showups,
+        showup_attainment: t.showups > 0 ? Number(((showupsMtd / t.showups) * 100).toFixed(2)) : 0,
         demos: dayDemos,
         demos_mtd: demosMtd,
-        demo_target: DEMO_TARGET,
-        demo_attainment: DEMO_TARGET > 0 ? Number(((demosMtd / DEMO_TARGET) * 100).toFixed(2)) : 0,
+        demo_target: t.demos,
+        demo_attainment: t.demos > 0 ? Number(((demosMtd / t.demos) * 100).toFixed(2)) : 0,
         closes: dayCloses,
         closes_mtd: closesMtd,
         closes_target_till_date: closesTargetTillDate,
-        closes_target: CLOSES_TARGET,
+        closes_target: t.closes,
         close_attainment: closesTargetTillDate > 0 ? Number(((closesMtd / closesTargetTillDate) * 100).toFixed(2)) : 0,
         arr: dayArr,
         arr_mtd: arrMtd,
         arr_target_till_date: arrTargetTillDate,
-        arr_target: ARR_TARGET,
+        arr_target: t.arr,
         arr_attainment: arrTargetTillDate > 0 ? Number(((arrMtd / arrTargetTillDate) * 100).toFixed(2)) : 0,
         working_days_gone: dayIndex,
-        pct_working_days: Number(((dayIndex / TOTAL_WORKING_DAYS) * 100).toFixed(1)),
+        pct_working_days: Number(((dayIndex / t.workingDays) * 100).toFixed(1)),
       };
     });
 
