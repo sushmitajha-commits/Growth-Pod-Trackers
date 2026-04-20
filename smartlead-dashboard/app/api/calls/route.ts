@@ -39,6 +39,7 @@ export async function GET() {
   try {
     await client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
 
+    // Daily call stats
     const result = await client.query(`
       WITH daily_logs AS (
         SELECT
@@ -47,37 +48,57 @@ export async function GET() {
           SUM(CASE WHEN campaign_id IS NOT NULL THEN 1 ELSE 0 END)           AS sales_dialer_calls,
           SUM(CASE WHEN campaign_id IS NULL     THEN 1 ELSE 0 END)           AS justcall_calls,
           COUNT(DISTINCT contact_number)                                      AS unique_dials,
-          SUM(CASE WHEN disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END) AS demos
+          SUM(CASE WHEN disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END) AS demos_from_calls
         FROM gist.justcall_burner_email_call_logs
         WHERE COALESCE(campaign_name, '') NOT ILIKE '%meta%'
           AND COALESCE(agent_name, '') NOT ILIKE '%allaine%'
           AND ((call_date::text || ' ' || call_time::text)::timestamp - interval '4 hours')::date >= DATE_TRUNC('month', CURRENT_DATE)::date
         GROUP BY 1
       )
-      SELECT
-        date,
-        total_calls,
-        SUM(total_calls) OVER (
-          PARTITION BY DATE_TRUNC('month', date)
-          ORDER BY date
-          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        ) AS calls_mtd,
-        100000 AS target,
-        ROUND(
-          SUM(total_calls) OVER (
-            PARTITION BY DATE_TRUNC('month', date)
-            ORDER BY date
-            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-          )::numeric / 100000 * 100, 2
-        ) AS attainment,
-        sales_dialer_calls,
-        justcall_calls,
-        unique_dials,
-        demos
-      FROM daily_logs
-      WHERE date < CURRENT_DATE
-      ORDER BY date DESC
+      SELECT * FROM daily_logs WHERE date < CURRENT_DATE ORDER BY date DESC
     `);
+
+    // Unique demos per call_date from gtm_demo_bookings (one per account)
+    const demosResult = await client.query(`
+      SELECT
+        call_date::date AS call_date,
+        COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos
+      FROM gist.gtm_demo_bookings
+      WHERE call_date IS NOT NULL
+        AND call_date::date >= DATE_TRUNC('month', CURRENT_DATE)::date
+        AND call_date::date < CURRENT_DATE
+      GROUP BY call_date::date
+    `);
+
+    const unifiedDemosMap: Record<string, number> = {};
+    for (const r of demosResult.rows) {
+      unifiedDemosMap[String(r.call_date)] = Number(r.demos);
+    }
+
+    // Merge: add MTD calculations in JS
+    const sortedForMtdCalc = [...result.rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    let callsMtd = 0;
+    const mtdMap: Record<string, { calls_mtd: number; attainment: number }> = {};
+    for (const r of sortedForMtdCalc) {
+      callsMtd += Number(r.total_calls);
+      mtdMap[String(r.date)] = {
+        calls_mtd: callsMtd,
+        attainment: Number(((callsMtd / 100000) * 100).toFixed(2)),
+      };
+    }
+
+    // Replace result rows with merged data
+    const mergedRows = result.rows.map((r) => {
+      const dateStr = String(r.date);
+      const m = mtdMap[dateStr] || { calls_mtd: 0, attainment: 0 };
+      return {
+        ...r,
+        calls_mtd: m.calls_mtd,
+        target: 100000,
+        attainment: m.attainment,
+        demos: unifiedDemosMap[dateStr] || Number(r.demos_from_calls),
+      };
+    });
 
     // Showups from sybill_meetings
     const showupsResult = await client.query(`
@@ -132,7 +153,7 @@ export async function GET() {
     }
 
     // Sort ascending to calculate running totals
-    const sortedForMtd = [...result.rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const sortedForMtd = [...mergedRows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
     let showupsMtd = 0;
     let uniqueContactsMtd = 0;
     let demosScheduledMtd = 0;
@@ -174,7 +195,7 @@ export async function GET() {
       dayIndex++;
     }
 
-    const rows = result.rows.map((r) => {
+    const rows = mergedRows.map((r) => {
       const dateStr = String(r.date);
       const c = computedMap[dateStr] ?? {
         showups: 0, showups_mtd: 0, showup_target: 0,
