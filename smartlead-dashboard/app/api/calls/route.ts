@@ -1,19 +1,11 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
 
-// Showup targets for April (22 working days, index 0 = day 1)
-const SHOWUP_TARGETS = [
-  11, 23, 34, 45, 57, 68, 80, 91, 102, 114,
-  125, 136, 148, 159, 170, 182, 193, 205, 216, 227,
-  239, 250,
-];
+// Showup targets for April (22 working days, target = 185, index 0 = day 1)
+const SHOWUP_TARGETS = Array.from({ length: 22 }, (_, i) => Math.round((185 / 22) * (i + 1)));
 
-// Demo plan targets for April (22 working days)
-const DEMO_PLAN_TARGETS = [
-  23, 45, 68, 91, 114, 136, 159, 182, 205, 227,
-  250, 273, 295, 318, 341, 364, 386, 409, 432, 455,
-  477, 500,
-];
+// Demo plan targets for April (22 working days, target = 463)
+const DEMO_PLAN_TARGETS = Array.from({ length: 22 }, (_, i) => Math.round((463 / 22) * (i + 1)));
 
 // New contacts loaded: hardcoded Apr 1–14
 const NEW_CONTACTS_MAP: Record<string, number> = {
@@ -31,7 +23,7 @@ const NEW_CONTACTS_MAP: Record<string, number> = {
 };
 
 const MONTHLY_MAX_CONTACTS = 79000;
-const SHOWUP_PLAN = 250;
+const SHOWUP_PLAN = 185;
 const TOTAL_WORKING_DAYS = 22;
 
 export async function GET() {
@@ -39,7 +31,6 @@ export async function GET() {
   try {
     await client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
 
-    // Daily call stats
     const result = await client.query(`
       WITH daily_logs AS (
         SELECT
@@ -48,57 +39,37 @@ export async function GET() {
           SUM(CASE WHEN campaign_id IS NOT NULL THEN 1 ELSE 0 END)           AS sales_dialer_calls,
           SUM(CASE WHEN campaign_id IS NULL     THEN 1 ELSE 0 END)           AS justcall_calls,
           COUNT(DISTINCT contact_number)                                      AS unique_dials,
-          SUM(CASE WHEN disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END) AS demos_from_calls
+          SUM(CASE WHEN disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END) AS demos
         FROM gist.justcall_burner_email_call_logs
         WHERE COALESCE(campaign_name, '') NOT ILIKE '%meta%'
           AND COALESCE(agent_name, '') NOT ILIKE '%allaine%'
           AND ((call_date::text || ' ' || call_time::text)::timestamp - interval '4 hours')::date >= DATE_TRUNC('month', CURRENT_DATE)::date
         GROUP BY 1
       )
-      SELECT * FROM daily_logs WHERE date < CURRENT_DATE ORDER BY date DESC
-    `);
-
-    // Unique demos per call_date from gtm_demo_bookings (one per account)
-    const demosResult = await client.query(`
       SELECT
-        call_date::date AS call_date,
-        COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos
-      FROM gist.gtm_demo_bookings
-      WHERE call_date IS NOT NULL
-        AND call_date::date >= DATE_TRUNC('month', CURRENT_DATE)::date
-        AND call_date::date < CURRENT_DATE
-      GROUP BY call_date::date
+        date,
+        total_calls,
+        SUM(total_calls) OVER (
+          PARTITION BY DATE_TRUNC('month', date)
+          ORDER BY date
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS calls_mtd,
+        100000 AS target,
+        ROUND(
+          SUM(total_calls) OVER (
+            PARTITION BY DATE_TRUNC('month', date)
+            ORDER BY date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+          )::numeric / 100000 * 100, 2
+        ) AS attainment,
+        sales_dialer_calls,
+        justcall_calls,
+        unique_dials,
+        demos
+      FROM daily_logs
+      WHERE date < CURRENT_DATE
+      ORDER BY date DESC
     `);
-
-    const unifiedDemosMap: Record<string, number> = {};
-    for (const r of demosResult.rows) {
-      unifiedDemosMap[String(r.call_date)] = Number(r.demos);
-    }
-
-    // Merge: add MTD calculations in JS
-    const sortedForMtdCalc = [...result.rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    let callsMtd = 0;
-    const mtdMap: Record<string, { calls_mtd: number; attainment: number }> = {};
-    for (const r of sortedForMtdCalc) {
-      callsMtd += Number(r.total_calls);
-      mtdMap[String(r.date)] = {
-        calls_mtd: callsMtd,
-        attainment: Number(((callsMtd / 100000) * 100).toFixed(2)),
-      };
-    }
-
-    // Replace result rows with merged data
-    const mergedRows = result.rows.map((r) => {
-      const dateStr = String(r.date);
-      const m = mtdMap[dateStr] || { calls_mtd: 0, attainment: 0 };
-      return {
-        ...r,
-        calls_mtd: m.calls_mtd,
-        target: 100000,
-        attainment: m.attainment,
-        demos: unifiedDemosMap[dateStr] || Number(r.demos_from_calls),
-      };
-    });
 
     // Showups from sybill_meetings
     const showupsResult = await client.query(`
@@ -153,7 +124,7 @@ export async function GET() {
     }
 
     // Sort ascending to calculate running totals
-    const sortedForMtd = [...mergedRows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const sortedForMtd = [...result.rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
     let showupsMtd = 0;
     let uniqueContactsMtd = 0;
     let demosScheduledMtd = 0;
@@ -195,7 +166,7 @@ export async function GET() {
       dayIndex++;
     }
 
-    const rows = mergedRows.map((r) => {
+    const rows = result.rows.map((r) => {
       const dateStr = String(r.date);
       const c = computedMap[dateStr] ?? {
         showups: 0, showups_mtd: 0, showup_target: 0,
@@ -223,8 +194,8 @@ export async function GET() {
         demos: demos,
         demos_scheduled: demosScheduled,
         demos_scheduled_mtd: c.demos_scheduled_mtd,
-        demo_plan: 550,
-        demo_attainment: Number(((c.demos_scheduled_mtd / 550) * 100).toFixed(2)),
+        demo_plan: 463,
+        demo_attainment: Number(((c.demos_scheduled_mtd / 463) * 100).toFixed(2)),
         demo_to_call_rate: totalCalls > 0
           ? Number(((demos / totalCalls) * 100).toFixed(2)) : 0,
         showup_rate: demosScheduled > 0
