@@ -25,7 +25,7 @@ type EmailRow = {
 };
 
 type CallRow = {
-  date: string;route
+  date: string;
   total_calls: number;
   calls_mtd: number;
   target: number;
