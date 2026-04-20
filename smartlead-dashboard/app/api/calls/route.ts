@@ -192,7 +192,7 @@ export async function GET() {
         monthly_max_contacts: MONTHLY_MAX_CONTACTS,
         pct_contacts_used: Number(((c.unique_contacts_mtd / MONTHLY_MAX_CONTACTS) * 100).toFixed(2)),
         demos: demos,
-        demos_scheduled: demosScheduled,
+        demos_scheduled: demos,
         demos_scheduled_mtd: c.demos_scheduled_mtd,
         demo_plan: 463,
         demo_attainment: Number(((c.demos_scheduled_mtd / 463) * 100).toFixed(2)),
