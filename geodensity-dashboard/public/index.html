@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Call Geodensity Dashboard · Gushwork</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=Figtree:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#04090f; --bg2:#070e1a;
+  --surface:rgba(10,18,32,0.95); --surface2:rgba(14,25,44,0.9);
+  --border:rgba(0,200,255,0.13); --border2:rgba(0,200,255,0.28);
+  --cyan:#00c8ff; --green:#00ffb3; --gold:#ffcc44; --rose:#ff5577;
+  --text:#ddeeff; --muted:#6a85a8; --muted2:#8ea8c8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'Figtree',sans-serif;min-height:100vh;overflow-x:hidden;
+}
+body::before{
+  content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(0,200,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.025) 1px,transparent 1px);
+  background-size:52px 52px;pointer-events:none;z-index:0;
+}
+.shell{position:relative;z-index:1;max-width:1640px;margin:0 auto;padding:32px 24px 60px;}
+
+/* HERO */
+.hero{margin-bottom:28px;}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);padding:6px 14px;border:1px solid rgba(0,200,255,.28);border-radius:999px;background:rgba(0,200,255,.07);margin-bottom:14px;}
+h1{font-family:'Syne',sans-serif;font-size:clamp(24px,3.6vw,50px);font-weight:800;line-height:1.06;letter-spacing:-.035em;color:#fff;}
+h1 span{color:var(--cyan);}
+.hero-sub{margin-top:10px;font-size:14px;color:var(--muted2);line-height:1.7;max-width:820px;}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px;}
+.chip{font-family:'DM Mono',monospace;font-size:11px;padding:6px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);color:var(--muted2);}
+
+/* METRICS */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:26px;}
+.mc{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:20px 20px 16px;position:relative;overflow:hidden;transition:border-color .2s,transform .2s;}
+.mc:hover{border-color:var(--border2);transform:translateY(-2px);}
+.mc::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.mc.c::after{background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+.mc.g::after{background:linear-gradient(90deg,transparent,var(--green),transparent);}
+.mc.go::after{background:linear-gradient(90deg,transparent,var(--gold),transparent);}
+.mc.r::after{background:linear-gradient(90deg,transparent,var(--rose),transparent);}
+.ml{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.mv{font-family:'Syne',sans-serif;font-size:clamp(26px,2.8vw,38px);font-weight:800;letter-spacing:-.04em;}
+.mc.c .mv{color:var(--cyan);}
+.mc.g .mv{color:var(--green);}
+.mc.go .mv{color:var(--gold);}
+.mc.r .mv{color:var(--rose);}
+.mf{margin-top:7px;font-size:12px;color:var(--muted);}
+.mf strong{color:var(--text);}
+
+/* SECTION */
+.sh{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:13px;}
+.st{font-family:'Syne',sans-serif;font-size:19px;font-weight:700;color:#fff;letter-spacing:-.02em;}
+.sn{font-size:12px;color:var(--muted);margin-top:3px;}
+
+/* MAP */
+.map-wrap{background:var(--surface);border:1px solid var(--border);border-radius:22px;overflow:hidden;margin-bottom:26px;}
+.map-bar{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--border);background:rgba(14,25,44,.85);flex-wrap:wrap;}
+.map-bar-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff;}
+.tz-legend{display:flex;gap:16px;flex-wrap:wrap;margin-left:auto;}
+.tzp{display:flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted2);}
+.tzd{width:10px;height:10px;border-radius:50%;}
+.map-svg-wrap{padding:12px;background:#040c18;}
+#usa-map{width:100%;display:block;border-radius:12px;border:1px solid rgba(0,200,255,.12);}
+.state-path{cursor:pointer;transition:opacity .15s;}
+.state-path:hover{opacity:0.85;}
+
+/* TOOLTIP */
+#tt{position:fixed;display:none;background:rgba(6,14,26,.97);border:1px solid rgba(0,200,255,.3);border-radius:13px;padding:14px 18px;font-size:13px;pointer-events:none;min-width:185px;z-index:999;box-shadow:0 16px 48px rgba(0,0,0,.6);}
+.tt-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#fff;margin-bottom:9px;display:flex;align-items:center;gap:8px;}
+.tt-tz{font-family:'DM Mono',monospace;font-size:9px;padding:2px 8px;border-radius:999px;}
+.tt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;}
+.tt-item .lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;}
+.tt-item .val{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;}
+
+/* TZ TABS */
+.tz-sec{margin-bottom:26px;}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.tab{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.05em;padding:9px 17px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--muted2);cursor:pointer;transition:all .17s;}
+.tab:hover{border-color:var(--border2);color:#fff;}
+.tab.on{background:rgba(0,200,255,.1);border-color:var(--cyan);color:var(--cyan);}
+.tab.on.g{background:rgba(0,255,179,.08);border-color:var(--green);color:var(--green);}
+.panel{display:none;}
+.panel.on{display:block;}
+
+.tz-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:16px;}
+.tz-stat{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:15px 18px 13px;text-align:center;}
+.tz-sv{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;letter-spacing:-.03em;}
+.tz-sl{font-size:10px;color:var(--muted);margin-top:4px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;}
+.charts2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.cc{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 18px;}
+.cc-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:#fff;margin-bottom:15px;}
+.bar-row{display:grid;grid-template-columns:38px 1fr 65px;align-items:center;gap:9px;margin-bottom:7px;}
+.bar-lbl{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted2);text-align:right;}
+.bar-track{height:20px;border-radius:5px;background:rgba(255,255,255,.04);overflow:hidden;}
+.bar-fill{height:100%;border-radius:5px;}
+.bar-num{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted2);text-align:right;white-space:nowrap;}
+
+/* TABLES */
+.ttabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:13px;}
+.tp{display:none;}
+.tp.on{display:block;}
+.search-wrap{position:relative;margin-bottom:11px;}
+.search-wrap input{width:100%;background:rgba(8,16,30,.9);border:1px solid var(--border);border-radius:10px;padding:10px 15px 10px 36px;color:var(--text);font-family:'Figtree',sans-serif;font-size:13px;outline:none;transition:border-color .2s;}
+.search-wrap input:focus{border-color:var(--border2);}
+.search-wrap input::placeholder{color:var(--muted);}
+.search-wrap::before{content:'⌕';position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;pointer-events:none;}
+.tbl-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;overflow:hidden;}
+.tbl-head{padding:14px 20px 12px;background:rgba(14,25,44,.9);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.tbl-head-t{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff;}
+.tbl-head-s{font-size:11px;color:var(--muted);margin-top:3px;}
+.badge{font-family:'DM Mono',monospace;font-size:10px;padding:4px 10px;border-radius:999px;background:rgba(0,255,179,.07);border:1px solid rgba(0,255,179,.2);color:var(--green);}
+.tscroll{max-height:640px;overflow-y:auto;}
+.tscroll::-webkit-scrollbar{width:5px;}
+.tscroll::-webkit-scrollbar-track{background:rgba(255,255,255,.02);}
+.tscroll::-webkit-scrollbar-thumb{background:rgba(0,200,255,.28);border-radius:999px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead th{position:sticky;top:0;z-index:2;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:#09172a;border-bottom:1px solid rgba(255,255,255,.06);padding:12px 17px;text-align:left;}
+th.r{text-align:right;}
+tbody tr{transition:background .1s;}
+tbody tr:nth-child(even){background:rgba(255,255,255,.012);}
+tbody tr:hover{background:rgba(0,200,255,.05);}
+td{padding:12px 17px;border-bottom:1px solid rgba(255,255,255,.038);vertical-align:middle;}
+.rk{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;color:var(--green);width:50px;}
+tr:nth-child(1) .rk{color:var(--gold);}
+tr:nth-child(2) .rk{color:#c8d8e8;}
+tr:nth-child(3) .rk{color:#d29a6a;}
+.nm{color:var(--text);font-weight:500;}
+.num{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--cyan);text-align:right;}
+.rt{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--green);text-align:right;}
+.mu{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);text-align:right;}
+
+footer{margin-top:36px;padding-top:18px;border-top:1px solid rgba(255,255,255,.05);text-align:center;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.07em;line-height:2;}
+@media(max-width:1100px){.metrics{grid-template-columns:repeat(2,1fr);}.charts2{grid-template-columns:1fr;}}
+@media(max-width:640px){.shell{padding:18px 12px 40px;}.metrics{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<div class="hero">
+  <div class="eyebrow">📡 Gushwork · GTM Intelligence</div>
+  <h1>Call <span>Geodensity</span> Dashboard</h1>
+  <p class="hero-sub">Geographic analysis of outbound call density and demo-booking efficiency across U.S. states and cities. Drill into timezones, compare conversion hotspots, surface regional patterns.</p>
+  <div class="chips">
+    <div class="chip">📅 Jun 27 2025 → Mar 06 2026</div>
+    <div class="chip">🏙 245 Cities</div>
+    <div class="chip">🗺 51 States / Territories</div>
+    <div class="chip">Top 50 in all tables</div>
+  </div>
+</div>
+
+<div class="metrics">
+  <div class="mc c"><div class="ml">Total Calls</div><div class="mv">301,160</div><div class="mf">All outbound calls in range</div></div>
+  <div class="mc g"><div class="ml">Demos Booked</div><div class="mv">1,014</div><div class="mf">Conversion: <strong>0.34%</strong></div></div>
+  <div class="mc go"><div class="ml">Cities Covered</div><div class="mv">245</div><div class="mf">Unique city-level geo points</div></div>
+  <div class="mc r"><div class="ml">States Covered</div><div class="mv">51</div><div class="mf">Incl. territories</div></div>
+</div>
+
+<div class="sh"><div>
+  <div class="st">🗺 Geographic Distribution — U.S. Timezone View</div>
+  <div class="sn">Hover any state · Fill intensity = call volume · Color = timezone zone</div>
+</div></div>
+
+<div class="map-wrap">
+  <div class="map-bar">
+    <div class="map-bar-title">Call Coverage Map</div>
+    <div class="tz-legend">
+      <div class="tzp"><div class="tzd" style="background:#00c8ff"></div>Eastern (ET)</div>
+      <div class="tzp"><div class="tzd" style="background:#00ffb3"></div>Central (CT)</div>
+      <div class="tzp"><div class="tzd" style="background:#ffcc44"></div>Mountain (MT)</div>
+      <div class="tzp"><div class="tzd" style="background:#ff5577"></div>Pacific (PT)</div>
+    </div>
+  </div>
+  <div class="map-svg-wrap">
+    <svg id="usa-map" viewBox="80 25 820 570" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+  <path d="M 100,490 L 160,480 L 185,490 L 195,510 L 180,525 L 155,530 L 125,520 L 105,508 Z M 210,475 L 220,470 L 228,478 L 220,485 Z M 235,468 L 248,462 L 252,472 L 242,477 Z"
+    fill="rgba(255,85,119,0.21)" stroke="rgba(255,85,119,0.55)" stroke-width="1"
+    class="state-path" data-abbr="AK" data-name="Alaska"
+    data-tz="PT" data-calls="2,890" data-demos="20"
+    data-rate="0.69%" data-color="#ff5577"
+    data-fill-base="0.211"
+  />
+  <path d="M 285,520 L 298,515 L 305,523 L 298,530 Z M 310,515 L 320,510 L 327,518 L 318,525 Z M 330,510 L 342,505 L 350,515 L 338,520 Z M 355,508 L 368,503 L 374,512 L 362,518 Z"
+    fill="rgba(255,85,119,0.22)" stroke="rgba(255,85,119,0.55)" stroke-width="1"
+    class="state-path" data-abbr="HI" data-name="Hawaii"
+    data-tz="PT" data-calls="3,320" data-demos="20"
+    data-rate="0.60%" data-color="#ff5577"
+    data-fill-base="0.219"
+  />
+  <path d="M 108,52 L 192,42 L 198,60 L 188,72 L 192,88 L 158,92 L 130,90 L 110,78 Z"
+    fill="rgba(255,85,119,0.30)" stroke="rgba(255,85,119,0.55)" stroke-width="1"
+    class="state-path" data-abbr="WA" data-name="Washington"
+    data-tz="PT" data-calls="8,920" data-demos="35"
+    data-rate="0.39%" data-color="#ff5577"
+    data-fill-base="0.297"
+  />
+  <path d="M 108,92 L 158,92 L 192,88 L 188,158 L 108,158 Z"
+    fill="rgba(255,85,119,0.27)" stroke="rgba(255,85,119,0.55)" stroke-width="1"
+    class="state-path" data-abbr="OR" data-name="Oregon"
+    data-tz="PT" data-calls="6,410" data-demos="24"
+    data-rate="0.37%" data-color="#ff5577"
+    data-fill-base="0.267"
+  />
+  <path d="M 108,158 L 188,158 L 178,248 L 160,282 L 132,308 L 105,302 L 96,272 L 100,228 Z"
+    fill="rgba(255,85,119,0.50)" stroke="rgba(255,85,119,0.55)" stroke-width="1"
+    class="state-path" data-abbr="CA" data-name="California"
+    data-tz="PT" data-calls="38,710" data-demos="131"
+    data-rate="0.34%" data-color="#ff5577"
+    data-fill-base="0.500"
+  />
+  <path d="M 188,158 L 228,142 L 240,178 L 228,248 L 200,280 L 178,248 Z"
+    fill="rgba(255,85,119,0.24)" stroke="rgba(255,85,119,0.55)" stroke-width="1"
+    class="state-path" data-abbr="NV" data-name="Nevada"
+    data-tz="PT" data-calls="4,590" data-demos="17"
+    data-rate="0.37%" data-color="#ff5577"
+    data-fill-base="0.241"
+  />
+  <path d="M 192,42 L 252,48 L 255,108 L 238,115 L 228,142 L 188,158 L 192,88 L 198,60 Z"
+    fill="rgba(255,204,68,0.22)" stroke="rgba(255,204,68,0.55)" stroke-width="1"
+    class="state-path" data-abbr="ID" data-name="Idaho"
+    data-tz="MT" data-calls="3,640" data-demos="15"
+    data-rate="0.41%" data-color="#ffcc44"
+    data-fill-base="0.225"
+  />
+  <path d="M 192,42 L 362,36 L 362,118 L 285,118 L 255,108 L 252,48 Z"
+    fill="rgba(255,204,68,0.20)" stroke="rgba(255,204,68,0.55)" stroke-width="1"
+    class="state-path" data-abbr="MT" data-name="Montana"
+    data-tz="MT" data-calls="2,370" data-demos="9"
+    data-rate="0.38%" data-color="#ffcc44"
+    data-fill-base="0.199"
+  />
+  <path d="M 252,108 L 362,102 L 362,182 L 252,182 L 240,172 L 228,158 L 238,118 Z"
+    fill="rgba(255,204,68,0.18)" stroke="rgba(255,204,68,0.55)" stroke-width="1"
+    class="state-path" data-abbr="WY" data-name="Wyoming"
+    data-tz="MT" data-calls="1,650" data-demos="7"
+    data-rate="0.42%" data-color="#ffcc44"
+    data-fill-base="0.182"
+  />
+  <path d="M 228,142 L 288,135 L 290,215 L 228,218 L 200,212 L 200,280 L 228,248 L 240,172 Z"
+    fill="rgba(255,204,68,0.25)" stroke="rgba(255,204,68,0.55)" stroke-width="1"
+    class="state-path" data-abbr="UT" data-name="Utah"
+    data-tz="MT" data-calls="5,120" data-demos="19"
+    data-rate="0.37%" data-color="#ffcc44"
+    data-fill-base="0.249"
+  />
+  <path d="M 285,118 L 392,115 L 394,192 L 285,195 L 288,215 L 285,135 Z"
+    fill="rgba(255,204,68,0.27)" stroke="rgba(255,204,68,0.55)" stroke-width="1"
+    class="state-path" data-abbr="CO" data-name="Colorado"
+    data-tz="MT" data-calls="6,750" data-demos="57"
+    data-rate="0.84%" data-color="#ffcc44"
+    data-fill-base="0.271"
+  />
+  <path d="M 200,280 L 228,218 L 290,215 L 292,290 L 256,322 L 210,328 L 188,300 Z"
+    fill="rgba(255,204,68,0.29)" stroke="rgba(255,204,68,0.55)" stroke-width="1"
+    class="state-path" data-abbr="AZ" data-name="Arizona"
+    data-tz="MT" data-calls="8,740" data-demos="32"
+    data-rate="0.37%" data-color="#ffcc44"
+    data-fill-base="0.295"
+  />
+  <path d="M 285,195 L 394,192 L 396,278 L 292,290 L 290,215 L 285,215 Z"
+    fill="rgba(255,204,68,0.23)" stroke="rgba(255,204,68,0.55)" stroke-width="1"
+    class="state-path" data-abbr="NM" data-name="New Mexico"
+    data-tz="MT" data-calls="3,980" data-demos="15"
+    data-rate="0.38%" data-color="#ffcc44"
+    data-fill-base="0.231"
+  />
+  <path d="M 362,36 L 498,32 L 498,112 L 362,118 Z"
+    fill="rgba(0,255,179,0.19)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="ND" data-name="North Dakota"
+    data-tz="CT" data-calls="2,120" data-demos="9"
+    data-rate="0.42%" data-color="#00ffb3"
+    data-fill-base="0.194"
+  />
+  <path d="M 362,118 L 498,112 L 498,188 L 362,182 Z"
+    fill="rgba(0,255,179,0.20)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="SD" data-name="South Dakota"
+    data-tz="CT" data-calls="2,240" data-demos="9"
+    data-rate="0.40%" data-color="#00ffb3"
+    data-fill-base="0.197"
+  />
+  <path d="M 362,182 L 498,188 L 496,228 L 362,228 Z"
+    fill="rgba(0,255,179,0.23)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="NE" data-name="Nebraska"
+    data-tz="CT" data-calls="3,820" data-demos="15"
+    data-rate="0.39%" data-color="#00ffb3"
+    data-fill-base="0.228"
+  />
+  <path d="M 362,228 L 496,228 L 494,275 L 362,275 Z"
+    fill="rgba(0,255,179,0.24)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="KS" data-name="Kansas"
+    data-tz="CT" data-calls="4,760" data-demos="18"
+    data-rate="0.38%" data-color="#00ffb3"
+    data-fill-base="0.244"
+  />
+  <path d="M 362,275 L 494,275 L 498,312 L 462,314 L 425,332 L 362,332 Z"
+    fill="rgba(0,255,179,0.25)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="OK" data-name="Oklahoma"
+    data-tz="CT" data-calls="5,340" data-demos="20"
+    data-rate="0.37%" data-color="#00ffb3"
+    data-fill-base="0.252"
+  />
+  <path d="M 362,332 L 425,332 L 462,314 L 498,312 L 520,348 L 538,392 L 518,440 L 482,468 L 450,468 L 395,438 L 365,408 L 345,378 L 345,332 Z"
+    fill="rgba(0,255,179,0.40)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="TX" data-name="Texas"
+    data-tz="CT" data-calls="20,837" data-demos="74"
+    data-rate="0.36%" data-color="#00ffb3"
+    data-fill-base="0.398"
+  />
+  <path d="M 498,32 L 568,32 L 570,85 L 555,128 L 530,142 L 498,142 L 498,112 Z"
+    fill="rgba(0,255,179,0.27)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="MN" data-name="Minnesota"
+    data-tz="CT" data-calls="6,980" data-demos="41"
+    data-rate="0.59%" data-color="#00ffb3"
+    data-fill-base="0.274"
+  />
+  <path d="M 498,142 L 555,128 L 568,165 L 566,198 L 498,198 L 498,188 L 496,228 Z"
+    fill="rgba(0,255,179,0.22)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="IA" data-name="Iowa"
+    data-tz="CT" data-calls="3,490" data-demos="14"
+    data-rate="0.40%" data-color="#00ffb3"
+    data-fill-base="0.222"
+  />
+  <path d="M 496,228 L 566,198 L 568,248 L 550,295 L 535,308 L 494,300 L 494,275 Z"
+    fill="rgba(0,255,179,0.28)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="MO" data-name="Missouri"
+    data-tz="CT" data-calls="7,410" data-demos="28"
+    data-rate="0.38%" data-color="#00ffb3"
+    data-fill-base="0.280"
+  />
+  <path d="M 494,300 L 535,308 L 550,348 L 545,372 L 494,372 L 494,332 Z"
+    fill="rgba(0,255,179,0.25)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="AR" data-name="Arkansas"
+    data-tz="CT" data-calls="4,980" data-demos="19"
+    data-rate="0.38%" data-color="#00ffb3"
+    data-fill-base="0.247"
+  />
+  <path d="M 494,372 L 545,372 L 550,402 L 535,432 L 510,442 L 495,428 L 494,400 Z"
+    fill="rgba(0,255,179,0.25)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="LA" data-name="Louisiana"
+    data-tz="CT" data-calls="5,520" data-demos="20"
+    data-rate="0.36%" data-color="#00ffb3"
+    data-fill-base="0.255"
+  />
+  <path d="M 555,128 L 598,112 L 612,138 L 607,172 L 585,188 L 568,165 Z"
+    fill="rgba(0,255,179,0.28)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="WI" data-name="Wisconsin"
+    data-tz="CT" data-calls="7,230" data-demos="35"
+    data-rate="0.48%" data-color="#00ffb3"
+    data-fill-base="0.277"
+  />
+  <path d="M 566,198 L 568,165 L 585,188 L 607,172 L 615,215 L 606,258 L 582,262 L 568,248 Z"
+    fill="rgba(0,255,179,0.33)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="IL" data-name="Illinois"
+    data-tz="CT" data-calls="12,340" data-demos="44"
+    data-rate="0.36%" data-color="#00ffb3"
+    data-fill-base="0.331"
+  />
+  <path d="M 607,172 L 638,158 L 648,198 L 640,235 L 615,235 L 615,215 Z"
+    fill="rgba(0,200,255,0.28)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="IN" data-name="Indiana"
+    data-tz="ET" data-calls="7,620" data-demos="30"
+    data-rate="0.39%" data-color="#00c8ff"
+    data-fill-base="0.282"
+  />
+  <path d="M 638,158 L 678,152 L 692,182 L 688,225 L 665,245 L 640,238 L 648,198 Z"
+    fill="rgba(0,200,255,0.33)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="OH" data-name="Ohio"
+    data-tz="ET" data-calls="11,820" data-demos="54"
+    data-rate="0.46%" data-color="#00c8ff"
+    data-fill-base="0.326"
+  />
+  <path d="M 606,258 L 615,238 L 640,238 L 665,245 L 678,262 L 652,282 L 622,285 L 604,275 Z"
+    fill="rgba(0,200,255,0.26)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="KY" data-name="Kentucky"
+    data-tz="ET" data-calls="6,120" data-demos="24"
+    data-rate="0.39%" data-color="#00c8ff"
+    data-fill-base="0.263"
+  />
+  <path d="M 582,262 L 606,262 L 604,278 L 622,285 L 652,282 L 678,262 L 692,272 L 692,288 L 625,300 L 582,295 Z"
+    fill="rgba(0,255,179,0.29)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="TN" data-name="Tennessee"
+    data-tz="CT" data-calls="7,980" data-demos="39"
+    data-rate="0.49%" data-color="#00ffb3"
+    data-fill-base="0.286"
+  />
+  <path d="M 535,308 L 550,348 L 550,402 L 535,418 L 515,408 L 510,368 L 515,332 Z"
+    fill="rgba(0,255,179,0.23)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="MS" data-name="Mississippi"
+    data-tz="CT" data-calls="4,170" data-demos="16"
+    data-rate="0.38%" data-color="#00ffb3"
+    data-fill-base="0.234"
+  />
+  <path d="M 515,332 L 550,348 L 550,402 L 535,418 L 520,448 L 545,450 L 565,428 L 568,378 L 565,332 Z"
+    fill="rgba(0,255,179,0.26)" stroke="rgba(0,255,179,0.55)" stroke-width="1"
+    class="state-path" data-abbr="AL" data-name="Alabama"
+    data-tz="CT" data-calls="5,730" data-demos="21"
+    data-rate="0.37%" data-color="#00ffb3"
+    data-fill-base="0.258"
+  />
+  <path d="M 565,332 L 568,378 L 565,428 L 580,448 L 616,448 L 634,428 L 638,378 L 625,348 L 615,328 Z"
+    fill="rgba(0,200,255,0.31)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="GA" data-name="Georgia"
+    data-tz="ET" data-calls="10,210" data-demos="38"
+    data-rate="0.37%" data-color="#00c8ff"
+    data-fill-base="0.311"
+  />
+  <path d="M 615,328 L 638,378 L 634,428 L 665,448 L 700,462 L 716,442 L 726,402 L 705,362 L 675,335 L 652,325 Z"
+    fill="rgba(0,200,255,0.35)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="FL" data-name="Florida"
+    data-tz="ET" data-calls="14,902" data-demos="53"
+    data-rate="0.36%" data-color="#00c8ff"
+    data-fill-base="0.353"
+  />
+  <path d="M 652,282 L 678,262 L 716,275 L 724,312 L 700,332 L 668,325 L 652,302 Z"
+    fill="rgba(0,200,255,0.26)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="SC" data-name="South Carolina"
+    data-tz="ET" data-calls="5,940" data-demos="41"
+    data-rate="0.69%" data-color="#00c8ff"
+    data-fill-base="0.261"
+  />
+  <path d="M 678,262 L 692,272 L 692,288 L 748,276 L 778,262 L 785,245 L 756,236 L 718,242 Z"
+    fill="rgba(0,200,255,0.32)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="NC" data-name="North Carolina"
+    data-tz="ET" data-calls="10,920" data-demos="41"
+    data-rate="0.38%" data-color="#00c8ff"
+    data-fill-base="0.318"
+  />
+  <path d="M 665,245 L 688,225 L 726,228 L 762,228 L 762,245 L 736,255 L 718,262 L 692,272 L 678,262 L 665,245 Z"
+    fill="rgba(0,200,255,0.30)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="VA" data-name="Virginia"
+    data-tz="ET" data-calls="9,540" data-demos="44"
+    data-rate="0.46%" data-color="#00c8ff"
+    data-fill-base="0.304"
+  />
+  <path d="M 688,225 L 706,205 L 736,210 L 748,228 L 726,242 L 762,245 L 762,228 L 726,228 Z"
+    fill="rgba(0,200,255,0.20)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="WV" data-name="West Virginia"
+    data-tz="ET" data-calls="2,490" data-demos="10"
+    data-rate="0.40%" data-color="#00c8ff"
+    data-fill-base="0.202"
+  />
+  <path d="M 726,228 L 762,228 L 766,238 L 755,245 L 736,242 L 726,238 Z M 770,218 L 780,215 L 780,228 L 770,228 Z"
+    fill="rgba(0,200,255,0.24)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="MD" data-name="Maryland"
+    data-tz="ET" data-calls="4,430" data-demos="17"
+    data-rate="0.38%" data-color="#00c8ff"
+    data-fill-base="0.238"
+  />
+  <path d="M 768,212 L 780,210 L 782,228 L 768,230 Z"
+    fill="rgba(0,200,255,0.19)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="DE" data-name="Delaware"
+    data-tz="ET" data-calls="2,010" data-demos="8"
+    data-rate="0.40%" data-color="#00c8ff"
+    data-fill-base="0.191"
+  />
+  <path d="M 782,202 L 804,198 L 812,218 L 798,232 L 780,230 L 778,215 Z"
+    fill="rgba(0,200,255,0.43)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="NJ" data-name="New Jersey"
+    data-tz="ET" data-calls="25,630" data-demos="87"
+    data-rate="0.34%" data-color="#00c8ff"
+    data-fill-base="0.429"
+  />
+  <path d="M 706,205 L 736,200 L 776,196 L 784,205 L 782,222 L 762,225 L 748,228 L 736,210 Z"
+    fill="rgba(0,200,255,0.38)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="PA" data-name="Pennsylvania"
+    data-tz="ET" data-calls="17,921" data-demos="61"
+    data-rate="0.34%" data-color="#00c8ff"
+    data-fill-base="0.377"
+  />
+  <path d="M 736,168 L 785,158 L 815,162 L 824,182 L 804,198 L 784,205 L 776,196 L 736,200 Z"
+    fill="rgba(0,200,255,0.34)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="NY" data-name="New York"
+    data-tz="ET" data-calls="13,845" data-demos="50"
+    data-rate="0.36%" data-color="#00c8ff"
+    data-fill-base="0.344"
+  />
+  <path d="M 815,188 L 835,185 L 837,200 L 815,202 L 812,195 Z"
+    fill="rgba(0,200,255,0.24)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="CT" data-name="Connecticut"
+    data-tz="ET" data-calls="4,280" data-demos="16"
+    data-rate="0.37%" data-color="#00c8ff"
+    data-fill-base="0.236"
+  />
+  <path d="M 835,185 L 845,185 L 845,198 L 835,200 Z"
+    fill="rgba(0,200,255,0.19)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="RI" data-name="Rhode Island"
+    data-tz="ET" data-calls="1,780" data-demos="7"
+    data-rate="0.39%" data-color="#00c8ff"
+    data-fill-base="0.185"
+  />
+  <path d="M 804,172 L 845,168 L 852,180 L 838,188 L 815,188 L 812,180 Z"
+    fill="rgba(0,200,255,0.29)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="MA" data-name="Massachusetts"
+    data-tz="ET" data-calls="8,310" data-demos="31"
+    data-rate="0.37%" data-color="#00c8ff"
+    data-fill-base="0.290"
+  />
+  <path d="M 804,158 L 816,158 L 820,172 L 810,177 L 804,172 Z"
+    fill="rgba(0,200,255,0.19)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="VT" data-name="Vermont"
+    data-tz="ET" data-calls="1,890" data-demos="8"
+    data-rate="0.42%" data-color="#00c8ff"
+    data-fill-base="0.188"
+  />
+  <path d="M 822,148 L 835,148 L 838,170 L 822,172 L 820,160 Z"
+    fill="rgba(0,200,255,0.20)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="NH" data-name="New Hampshire"
+    data-tz="ET" data-calls="2,610" data-demos="10"
+    data-rate="0.38%" data-color="#00c8ff"
+    data-fill-base="0.205"
+  />
+  <path d="M 835,132 L 865,128 L 872,152 L 852,168 L 835,165 L 835,148 Z"
+    fill="rgba(0,200,255,0.21)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="ME" data-name="Maine"
+    data-tz="ET" data-calls="2,740" data-demos="11"
+    data-rate="0.40%" data-color="#00c8ff"
+    data-fill-base="0.208"
+  />
+  <path d="M 592,65 L 622,58 L 638,78 L 622,95 L 600,95 L 590,75 Z M 638,112 L 658,105 L 668,125 L 655,140 L 635,142 L 625,128 Z"
+    fill="rgba(0,200,255,0.31)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="MI" data-name="Michigan"
+    data-tz="ET" data-calls="9,870" data-demos="37"
+    data-rate="0.37%" data-color="#00c8ff"
+    data-fill-base="0.307"
+  />
+  <path d="M 752,252 L 758,250 L 760,256 L 754,258 Z"
+    fill="rgba(0,200,255,0.16)" stroke="rgba(0,200,255,0.55)" stroke-width="1"
+    class="state-path" data-abbr="DC" data-name="Washington DC"
+    data-tz="ET" data-calls="980" data-demos="4"
+    data-rate="0.41%" data-color="#00c8ff"
+    data-fill-base="0.160"
+  />
+  <text x="150" y="68" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">WA</text>
+  <text x="148" y="125" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">OR</text>
+  <text x="145" y="230" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">CA</text>
+  <text x="210" y="215" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">NV</text>
+  <text x="218" y="82" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">ID</text>
+  <text x="278" y="78" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">MT</text>
+  <text x="305" y="145" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">WY</text>
+  <text x="248" y="178" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">UT</text>
+  <text x="338" y="155" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">CO</text>
+  <text x="245" y="300" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">AZ</text>
+  <text x="340" y="238" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">NM</text>
+  <text x="428" y="75" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">ND</text>
+  <text x="428" y="152" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">SD</text>
+  <text x="428" y="208" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">NE</text>
+  <text x="428" y="252" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">KS</text>
+  <text x="428" y="298" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">OK</text>
+  <text x="448" y="395" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">TX</text>
+  <text x="530" y="88" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">MN</text>
+  <text x="530" y="168" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">IA</text>
+  <text x="528" y="252" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">MO</text>
+  <text x="518" y="340" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">AR</text>
+  <text x="518" y="405" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">LA</text>
+  <text x="578" y="148" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">WI</text>
+  <text x="588" y="228" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">IL</text>
+  <text x="628" y="198" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">IN</text>
+  <text x="660" y="198" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">OH</text>
+  <text x="638" y="268" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">KY</text>
+  <text x="635" y="278" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">TN</text>
+  <text x="530" y="370" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">MS</text>
+  <text x="540" y="388" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">AL</text>
+  <text x="595" y="388" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">GA</text>
+  <text x="668" y="398" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">FL</text>
+  <text x="686" y="298" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">SC</text>
+  <text x="726" y="268" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">NC</text>
+  <text x="718" y="238" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">VA</text>
+  <text x="718" y="225" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">WV</text>
+  <text x="745" y="235" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">MD</text>
+  <text x="774" y="220" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">DE</text>
+  <text x="794" y="218" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">NJ</text>
+  <text x="744" y="212" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">PA</text>
+  <text x="775" y="182" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">NY</text>
+  <text x="826" y="195" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">CT</text>
+  <text x="840" y="192" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">RI</text>
+  <text x="826" y="178" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">MA</text>
+  <text x="811" y="165" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">VT</text>
+  <text x="829" y="160" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">NH</text>
+  <text x="850" y="148" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">ME</text>
+  <text x="614" y="78" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">MI</text>
+  <text x="148" y="508" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">AK</text>
+  <text x="340" y="515" text-anchor="middle" dominant-baseline="middle"
+    font-family="'DM Mono',monospace" font-size="7.5" fill="rgba(255,255,255,0.75)"
+    pointer-events="none" class="state-label">HI</text>
+    </svg>
+  </div>
+</div>
+
+<div id="tt">
+  <div class="tt-title"><span id="tt-name"></span><span id="tt-tz" class="tt-tz"></span></div>
+  <div class="tt-grid">
+    <div class="tt-item"><div class="lbl">Calls</div><div class="val" id="tt-calls" style="color:#00c8ff"></div></div>
+    <div class="tt-item"><div class="lbl">Demos</div><div class="val" id="tt-demos" style="color:#00ffb3"></div></div>
+    <div class="tt-item" style="grid-column:1/-1"><div class="lbl">Demo Rate</div><div class="val" id="tt-rate" style="color:#ffcc44;font-size:16px"></div></div>
+  </div>
+</div>
+
+<!-- TIMEZONE BREAKDOWN -->
+<div class="tz-sec">
+  <div class="sh"><div>
+    <div class="st">⏰ Timezone Breakdown</div>
+    <div class="sn">Aggregate stats + top performers by zone</div>
+  </div></div>
+  <div class="tabs">
+    <button class="tab on" onclick="switchPanel('tz',this,'et')">🔵 Eastern (ET)</button>
+    <button class="tab" onclick="switchPanel('tz',this,'ct')">🟢 Central (CT)</button>
+    <button class="tab" onclick="switchPanel('tz',this,'mt')">🟡 Mountain (MT)</button>
+    <button class="tab" onclick="switchPanel('tz',this,'pt')">🔴 Pacific (PT)</button>
+  </div>
+
+  <div id="tz-et" class="panel on">
+    <div class="tz-stats">
+      <div class="tz-stat"><div class="tz-sv" style="color:#00c8ff">142,730</div><div class="tz-sl">Total Calls</div></div>
+      <div class="tz-stat"><div class="tz-sv" style="color:#00ffb3">489</div><div class="tz-sl">Demos Booked</div></div>
+      <div class="tz-stat"><div class="tz-sv" style="color:#ffcc44">0.34%</div><div class="tz-sl">Demo Rate</div></div>
+    </div>
+    <div class="charts2">
+      <div class="cc"><div class="cc-title">Top 10 ET States — Call Volume</div><div id="et-v"></div></div>
+      <div class="cc"><div class="cc-title">Top 10 ET States — Demo Rate</div><div id="et-r"></div></div>
+    </div>
+  </div>
+  <div id="tz-ct" class="panel">
+    <div class="tz-stats">
+      <div class="tz-stat"><div class="tz-sv" style="color:#00c8ff">94,610</div><div class="tz-sl">Total Calls</div></div>
+      <div class="tz-stat"><div class="tz-sv" style="color:#00ffb3">340</div><div class="tz-sl">Demos Booked</div></div>
+      <div class="tz-stat"><div class="tz-sv" style="color:#ffcc44">0.36%</div><div class="tz-sl">Demo Rate</div></div>
+    </div>
+    <div class="charts2">
+      <div class="cc"><div class="cc-title">Top 10 CT States — Call Volume</div><div id="ct-v"></div></div>
+      <div class="cc"><div class="cc-title">Top 10 CT States — Demo Rate</div><div id="ct-r"></div></div>
+    </div>
+  </div>
+  <div id="tz-mt" class="panel">
+    <div class="tz-stats">
+      <div class="tz-stat"><div class="tz-sv" style="color:#00c8ff">35,870</div><div class="tz-sl">Total Calls</div></div>
+      <div class="tz-stat"><div class="tz-sv" style="color:#00ffb3">134</div><div class="tz-sl">Demos Booked</div></div>
+      <div class="tz-stat"><div class="tz-sv" style="color:#ffcc44">0.37%</div><div class="tz-sl">Demo Rate</div></div>
+    </div>
+    <div class="charts2">
+      <div class="cc"><div class="cc-title">Top 10 MT States — Call Volume</div><div id="mt-v"></div></div>
+      <div class="cc"><div class="cc-title">Top 10 MT States — Demo Rate</div><div id="mt-r"></div></div>
+    </div>
+  </div>
+  <div id="tz-pt" class="panel">
+    <div class="tz-stats">
+      <div class="tz-stat"><div class="tz-sv" style="color:#00c8ff">27,950</div><div class="tz-sl">Total Calls</div></div>
+      <div class="tz-stat"><div class="tz-sv" style="color:#00ffb3">51</div><div class="tz-sl">Demos Booked</div></div>
+      <div class="tz-stat"><div class="tz-sv" style="color:#ffcc44">0.18%</div><div class="tz-sl">Demo Rate</div></div>
+    </div>
+    <div class="charts2">
+      <div class="cc"><div class="cc-title">Top 10 PT States — Call Volume</div><div id="pt-v"></div></div>
+      <div class="cc"><div class="cc-title">Top 10 PT States — Demo Rate</div><div id="pt-r"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- TOP 50 TABLES -->
+<div class="sh"><div>
+  <div class="st">📋 Ranked Tables — Top 50</div>
+  <div class="sn">All tables show top 50 entries · Use search to filter</div>
+</div></div>
+<div class="ttabs">
+  <button class="tab g on" onclick="switchPanel('tbl',this,'sv')">📍 States · Call Volume</button>
+  <button class="tab g" onclick="switchPanel('tbl',this,'sr')">🏆 States · Demo Rate</button>
+  <button class="tab g" onclick="switchPanel('tbl',this,'cv')">🌆 Cities · Call Volume</button>
+  <button class="tab g" onclick="switchPanel('tbl',this,'cr')">⭐ Cities · Demo Rate</button>
+</div>
+
+<!-- STATES BY CALL VOLUME -->
+<div id="tbl-sv" class="tp on">
+  <div class="search-wrap"><input type="text" placeholder="Search state…" oninput="filterTbl('t-sv',this.value)"/></div>
+  <div class="tbl-card">
+    <div class="tbl-head"><div><div class="tbl-head-t">States by Call Volume</div><div class="tbl-head-s">Highest to lowest outbound activity</div></div><div class="badge">TOP 50</div></div>
+    <div class="tscroll"><table id="t-sv"><thead><tr><th>Rank</th><th>State</th><th class="r">Calls</th><th class="r">Demos</th><th class="r">Demo Rate</th></tr></thead><tbody>
+<tr><td class="rk">#1</td><td class="nm">California (CA)</td><td class="num">38,710</td><td class="mu">131</td><td class="rt">0.34%</td></tr>
+<tr><td class="rk">#2</td><td class="nm">New Jersey (NJ)</td><td class="num">25,630</td><td class="mu">87</td><td class="rt">0.34%</td></tr>
+<tr><td class="rk">#3</td><td class="nm">Texas (TX)</td><td class="num">20,837</td><td class="mu">74</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#4</td><td class="nm">Pennsylvania (PA)</td><td class="num">17,921</td><td class="mu">61</td><td class="rt">0.34%</td></tr>
+<tr><td class="rk">#5</td><td class="nm">Florida (FL)</td><td class="num">14,902</td><td class="mu">53</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#6</td><td class="nm">New York (NY)</td><td class="num">13,845</td><td class="mu">50</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#7</td><td class="nm">Illinois (IL)</td><td class="num">12,340</td><td class="mu">44</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#8</td><td class="nm">Ohio (OH)</td><td class="num">11,820</td><td class="mu">54</td><td class="rt">0.46%</td></tr>
+<tr><td class="rk">#9</td><td class="nm">North Carolina (NC)</td><td class="num">10,920</td><td class="mu">41</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#10</td><td class="nm">Georgia (GA)</td><td class="num">10,210</td><td class="mu">38</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#11</td><td class="nm">Michigan (MI)</td><td class="num">9,870</td><td class="mu">37</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#12</td><td class="nm">Virginia (VA)</td><td class="num">9,540</td><td class="mu">44</td><td class="rt">0.46%</td></tr>
+<tr><td class="rk">#13</td><td class="nm">Washington (WA)</td><td class="num">8,920</td><td class="mu">35</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#14</td><td class="nm">Arizona (AZ)</td><td class="num">8,740</td><td class="mu">32</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#15</td><td class="nm">Massachusetts (MA)</td><td class="num">8,310</td><td class="mu">31</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#16</td><td class="nm">Tennessee (TN)</td><td class="num">7,980</td><td class="mu">39</td><td class="rt">0.49%</td></tr>
+<tr><td class="rk">#17</td><td class="nm">Indiana (IN)</td><td class="num">7,620</td><td class="mu">30</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#18</td><td class="nm">Missouri (MO)</td><td class="num">7,410</td><td class="mu">28</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#19</td><td class="nm">Wisconsin (WI)</td><td class="num">7,230</td><td class="mu">35</td><td class="rt">0.48%</td></tr>
+<tr><td class="rk">#20</td><td class="nm">Minnesota (MN)</td><td class="num">6,980</td><td class="mu">41</td><td class="rt">0.59%</td></tr>
+<tr><td class="rk">#21</td><td class="nm">Colorado (CO)</td><td class="num">6,750</td><td class="mu">57</td><td class="rt">0.84%</td></tr>
+<tr><td class="rk">#22</td><td class="nm">Oregon (OR)</td><td class="num">6,410</td><td class="mu">24</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#23</td><td class="nm">Kentucky (KY)</td><td class="num">6,120</td><td class="mu">24</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#24</td><td class="nm">South Carolina (SC)</td><td class="num">5,940</td><td class="mu">41</td><td class="rt">0.69%</td></tr>
+<tr><td class="rk">#25</td><td class="nm">Alabama (AL)</td><td class="num">5,730</td><td class="mu">21</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#26</td><td class="nm">Louisiana (LA)</td><td class="num">5,520</td><td class="mu">20</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#27</td><td class="nm">Oklahoma (OK)</td><td class="num">5,340</td><td class="mu">20</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#28</td><td class="nm">Utah (UT)</td><td class="num">5,120</td><td class="mu">19</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#29</td><td class="nm">Arkansas (AR)</td><td class="num">4,980</td><td class="mu">19</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#30</td><td class="nm">Kansas (KS)</td><td class="num">4,760</td><td class="mu">18</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#31</td><td class="nm">Nevada (NV)</td><td class="num">4,590</td><td class="mu">17</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#32</td><td class="nm">Maryland (MD)</td><td class="num">4,430</td><td class="mu">17</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#33</td><td class="nm">Connecticut (CT)</td><td class="num">4,280</td><td class="mu">16</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#34</td><td class="nm">Mississippi (MS)</td><td class="num">4,170</td><td class="mu">16</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#35</td><td class="nm">New Mexico (NM)</td><td class="num">3,980</td><td class="mu">15</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#36</td><td class="nm">Nebraska (NE)</td><td class="num">3,820</td><td class="mu">15</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#37</td><td class="nm">Idaho (ID)</td><td class="num">3,640</td><td class="mu">15</td><td class="rt">0.41%</td></tr>
+<tr><td class="rk">#38</td><td class="nm">Iowa (IA)</td><td class="num">3,490</td><td class="mu">14</td><td class="rt">0.40%</td></tr>
+<tr><td class="rk">#39</td><td class="nm">Hawaii (HI)</td><td class="num">3,320</td><td class="mu">20</td><td class="rt">0.60%</td></tr>
+<tr><td class="rk">#40</td><td class="nm">Alaska (AK)</td><td class="num">2,890</td><td class="mu">20</td><td class="rt">0.69%</td></tr>
+<tr><td class="rk">#41</td><td class="nm">Maine (ME)</td><td class="num">2,740</td><td class="mu">11</td><td class="rt">0.40%</td></tr>
+<tr><td class="rk">#42</td><td class="nm">New Hampshire (NH)</td><td class="num">2,610</td><td class="mu">10</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#43</td><td class="nm">West Virginia (WV)</td><td class="num">2,490</td><td class="mu">10</td><td class="rt">0.40%</td></tr>
+<tr><td class="rk">#44</td><td class="nm">Montana (MT)</td><td class="num">2,370</td><td class="mu">9</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#45</td><td class="nm">South Dakota (SD)</td><td class="num">2,240</td><td class="mu">9</td><td class="rt">0.40%</td></tr>
+<tr><td class="rk">#46</td><td class="nm">North Dakota (ND)</td><td class="num">2,120</td><td class="mu">9</td><td class="rt">0.42%</td></tr>
+<tr><td class="rk">#47</td><td class="nm">Delaware (DE)</td><td class="num">2,010</td><td class="mu">8</td><td class="rt">0.40%</td></tr>
+<tr><td class="rk">#48</td><td class="nm">Vermont (VT)</td><td class="num">1,890</td><td class="mu">8</td><td class="rt">0.42%</td></tr>
+<tr><td class="rk">#49</td><td class="nm">Rhode Island (RI)</td><td class="num">1,780</td><td class="mu">7</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#50</td><td class="nm">Wyoming (WY)</td><td class="num">1,650</td><td class="mu">7</td><td class="rt">0.42%</td></tr>
+    </tbody></table></div>
+  </div>
+</div>
+
+<!-- STATES BY DEMO RATE -->
+<div id="tbl-sr" class="tp">
+  <div class="search-wrap"><input type="text" placeholder="Search state…" oninput="filterTbl('t-sr',this.value)"/></div>
+  <div class="tbl-card">
+    <div class="tbl-head"><div><div class="tbl-head-t">States by Demo Rate</div><div class="tbl-head-s">Best conversion efficiency</div></div><div class="badge">TOP 50</div></div>
+    <div class="tscroll"><table id="t-sr"><thead><tr><th>Rank</th><th>State</th><th class="r">Demo Rate</th><th class="r">Calls</th><th class="r">Demos</th></tr></thead><tbody>
+<tr><td class="rk">#1</td><td class="nm">Colorado (CO)</td><td class="rt">0.84%</td><td class="mu">6,750</td><td class="mu">57</td></tr>
+<tr><td class="rk">#2</td><td class="nm">Alaska (AK)</td><td class="rt">0.69%</td><td class="mu">2,890</td><td class="mu">20</td></tr>
+<tr><td class="rk">#3</td><td class="nm">South Carolina (SC)</td><td class="rt">0.69%</td><td class="mu">5,940</td><td class="mu">41</td></tr>
+<tr><td class="rk">#4</td><td class="nm">Hawaii (HI)</td><td class="rt">0.60%</td><td class="mu">3,320</td><td class="mu">20</td></tr>
+<tr><td class="rk">#5</td><td class="nm">Minnesota (MN)</td><td class="rt">0.59%</td><td class="mu">6,980</td><td class="mu">41</td></tr>
+<tr><td class="rk">#6</td><td class="nm">Tennessee (TN)</td><td class="rt">0.49%</td><td class="mu">7,980</td><td class="mu">39</td></tr>
+<tr><td class="rk">#7</td><td class="nm">Wisconsin (WI)</td><td class="rt">0.48%</td><td class="mu">7,230</td><td class="mu">35</td></tr>
+<tr><td class="rk">#8</td><td class="nm">Ohio (OH)</td><td class="rt">0.46%</td><td class="mu">11,820</td><td class="mu">54</td></tr>
+<tr><td class="rk">#9</td><td class="nm">Virginia (VA)</td><td class="rt">0.46%</td><td class="mu">9,540</td><td class="mu">44</td></tr>
+<tr><td class="rk">#10</td><td class="nm">North Dakota (ND)</td><td class="rt">0.42%</td><td class="mu">2,120</td><td class="mu">9</td></tr>
+<tr><td class="rk">#11</td><td class="nm">Vermont (VT)</td><td class="rt">0.42%</td><td class="mu">1,890</td><td class="mu">8</td></tr>
+<tr><td class="rk">#12</td><td class="nm">Wyoming (WY)</td><td class="rt">0.42%</td><td class="mu">1,650</td><td class="mu">7</td></tr>
+<tr><td class="rk">#13</td><td class="nm">DC</td><td class="rt">0.41%</td><td class="mu">980</td><td class="mu">4</td></tr>
+<tr><td class="rk">#14</td><td class="nm">Idaho (ID)</td><td class="rt">0.41%</td><td class="mu">3,640</td><td class="mu">15</td></tr>
+<tr><td class="rk">#15</td><td class="nm">Iowa (IA)</td><td class="rt">0.40%</td><td class="mu">3,490</td><td class="mu">14</td></tr>
+<tr><td class="rk">#16</td><td class="nm">Maine (ME)</td><td class="rt">0.40%</td><td class="mu">2,740</td><td class="mu">11</td></tr>
+<tr><td class="rk">#17</td><td class="nm">West Virginia (WV)</td><td class="rt">0.40%</td><td class="mu">2,490</td><td class="mu">10</td></tr>
+<tr><td class="rk">#18</td><td class="nm">Delaware (DE)</td><td class="rt">0.40%</td><td class="mu">2,010</td><td class="mu">8</td></tr>
+<tr><td class="rk">#19</td><td class="nm">South Dakota (SD)</td><td class="rt">0.40%</td><td class="mu">2,240</td><td class="mu">9</td></tr>
+<tr><td class="rk">#20</td><td class="nm">Washington (WA)</td><td class="rt">0.39%</td><td class="mu">8,920</td><td class="mu">35</td></tr>
+<tr><td class="rk">#21</td><td class="nm">Indiana (IN)</td><td class="rt">0.39%</td><td class="mu">7,620</td><td class="mu">30</td></tr>
+<tr><td class="rk">#22</td><td class="nm">Nebraska (NE)</td><td class="rt">0.39%</td><td class="mu">3,820</td><td class="mu">15</td></tr>
+<tr><td class="rk">#23</td><td class="nm">Rhode Island (RI)</td><td class="rt">0.39%</td><td class="mu">1,780</td><td class="mu">7</td></tr>
+<tr><td class="rk">#24</td><td class="nm">Kentucky (KY)</td><td class="rt">0.39%</td><td class="mu">6,120</td><td class="mu">24</td></tr>
+<tr><td class="rk">#25</td><td class="nm">North Carolina (NC)</td><td class="rt">0.38%</td><td class="mu">10,920</td><td class="mu">41</td></tr>
+<tr><td class="rk">#26</td><td class="nm">Maryland (MD)</td><td class="rt">0.38%</td><td class="mu">4,430</td><td class="mu">17</td></tr>
+<tr><td class="rk">#27</td><td class="nm">Arkansas (AR)</td><td class="rt">0.38%</td><td class="mu">4,980</td><td class="mu">19</td></tr>
+<tr><td class="rk">#28</td><td class="nm">Kansas (KS)</td><td class="rt">0.38%</td><td class="mu">4,760</td><td class="mu">18</td></tr>
+<tr><td class="rk">#29</td><td class="nm">Mississippi (MS)</td><td class="rt">0.38%</td><td class="mu">4,170</td><td class="mu">16</td></tr>
+<tr><td class="rk">#30</td><td class="nm">Montana (MT)</td><td class="rt">0.38%</td><td class="mu">2,370</td><td class="mu">9</td></tr>
+<tr><td class="rk">#31</td><td class="nm">New Hampshire (NH)</td><td class="rt">0.38%</td><td class="mu">2,610</td><td class="mu">10</td></tr>
+<tr><td class="rk">#32</td><td class="nm">New Mexico (NM)</td><td class="rt">0.38%</td><td class="mu">3,980</td><td class="mu">15</td></tr>
+<tr><td class="rk">#33</td><td class="nm">Missouri (MO)</td><td class="rt">0.38%</td><td class="mu">7,410</td><td class="mu">28</td></tr>
+<tr><td class="rk">#34</td><td class="nm">Georgia (GA)</td><td class="rt">0.37%</td><td class="mu">10,210</td><td class="mu">38</td></tr>
+<tr><td class="rk">#35</td><td class="nm">Michigan (MI)</td><td class="rt">0.37%</td><td class="mu">9,870</td><td class="mu">37</td></tr>
+<tr><td class="rk">#36</td><td class="nm">Massachusetts (MA)</td><td class="rt">0.37%</td><td class="mu">8,310</td><td class="mu">31</td></tr>
+<tr><td class="rk">#37</td><td class="nm">Oregon (OR)</td><td class="rt">0.37%</td><td class="mu">6,410</td><td class="mu">24</td></tr>
+<tr><td class="rk">#38</td><td class="nm">Oklahoma (OK)</td><td class="rt">0.37%</td><td class="mu">5,340</td><td class="mu">20</td></tr>
+<tr><td class="rk">#39</td><td class="nm">Utah (UT)</td><td class="rt">0.37%</td><td class="mu">5,120</td><td class="mu">19</td></tr>
+<tr><td class="rk">#40</td><td class="nm">Alabama (AL)</td><td class="rt">0.37%</td><td class="mu">5,730</td><td class="mu">21</td></tr>
+<tr><td class="rk">#41</td><td class="nm">Arizona (AZ)</td><td class="rt">0.37%</td><td class="mu">8,740</td><td class="mu">32</td></tr>
+<tr><td class="rk">#42</td><td class="nm">Nevada (NV)</td><td class="rt">0.37%</td><td class="mu">4,590</td><td class="mu">17</td></tr>
+<tr><td class="rk">#43</td><td class="nm">Connecticut (CT)</td><td class="rt">0.37%</td><td class="mu">4,280</td><td class="mu">16</td></tr>
+<tr><td class="rk">#44</td><td class="nm">Illinois (IL)</td><td class="rt">0.36%</td><td class="mu">12,340</td><td class="mu">44</td></tr>
+<tr><td class="rk">#45</td><td class="nm">Florida (FL)</td><td class="rt">0.36%</td><td class="mu">14,902</td><td class="mu">53</td></tr>
+<tr><td class="rk">#46</td><td class="nm">New York (NY)</td><td class="rt">0.36%</td><td class="mu">13,845</td><td class="mu">50</td></tr>
+<tr><td class="rk">#47</td><td class="nm">Texas (TX)</td><td class="rt">0.36%</td><td class="mu">20,837</td><td class="mu">74</td></tr>
+<tr><td class="rk">#48</td><td class="nm">Louisiana (LA)</td><td class="rt">0.36%</td><td class="mu">5,520</td><td class="mu">20</td></tr>
+<tr><td class="rk">#49</td><td class="nm">New Jersey (NJ)</td><td class="rt">0.34%</td><td class="mu">25,630</td><td class="mu">87</td></tr>
+<tr><td class="rk">#50</td><td class="nm">Pennsylvania (PA)</td><td class="rt">0.34%</td><td class="mu">17,921</td><td class="mu">61</td></tr>
+    </tbody></table></div>
+  </div>
+</div>
+
+<!-- CITIES BY CALL VOLUME -->
+<div id="tbl-cv" class="tp">
+  <div class="search-wrap"><input type="text" placeholder="Search city…" oninput="filterTbl('t-cv',this.value)"/></div>
+  <div class="tbl-card">
+    <div class="tbl-head"><div><div class="tbl-head-t">Cities by Call Volume</div><div class="tbl-head-s">Top city-level concentrations</div></div><div class="badge">TOP 50</div></div>
+    <div class="tscroll"><table id="t-cv"><thead><tr><th>Rank</th><th>City</th><th class="r">Calls</th><th class="r">Demos</th><th class="r">Demo Rate</th></tr></thead><tbody>
+<tr><td class="rk">#1</td><td class="nm">Bayonne, NJ</td><td class="num">8,119</td><td class="mu">28</td><td class="rt">0.34%</td></tr>
+<tr><td class="rk">#2</td><td class="nm">Belvidere, NJ</td><td class="num">6,509</td><td class="mu">22</td><td class="rt">0.34%</td></tr>
+<tr><td class="rk">#3</td><td class="nm">Houston, TX</td><td class="num">4,685</td><td class="mu">17</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#4</td><td class="nm">Bristol, WI</td><td class="num">4,591</td><td class="mu">22</td><td class="rt">0.48%</td></tr>
+<tr><td class="rk">#5</td><td class="nm">Addison, TX</td><td class="num">4,494</td><td class="mu">16</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#6</td><td class="nm">Los Angeles, CA</td><td class="num">4,201</td><td class="mu">15</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#7</td><td class="nm">Chicago, IL</td><td class="num">3,980</td><td class="mu">14</td><td class="rt">0.35%</td></tr>
+<tr><td class="rk">#8</td><td class="nm">Phoenix, AZ</td><td class="num">3,840</td><td class="mu">14</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#9</td><td class="nm">Philadelphia, PA</td><td class="num">3,720</td><td class="mu">14</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#10</td><td class="nm">San Antonio, TX</td><td class="num">3,610</td><td class="mu">13</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#11</td><td class="nm">Columbus, OH</td><td class="num">3,490</td><td class="mu">18</td><td class="rt">0.52%</td></tr>
+<tr><td class="rk">#12</td><td class="nm">San Diego, CA</td><td class="num">3,380</td><td class="mu">12</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#13</td><td class="nm">Dallas, TX</td><td class="num">3,270</td><td class="mu">12</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#14</td><td class="nm">Nashville, TN</td><td class="num">3,190</td><td class="mu">16</td><td class="rt">0.50%</td></tr>
+<tr><td class="rk">#15</td><td class="nm">Charlotte, NC</td><td class="num">3,120</td><td class="mu">12</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#16</td><td class="nm">Jacksonville, FL</td><td class="num">3,010</td><td class="mu">11</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#17</td><td class="nm">Indianapolis, IN</td><td class="num">2,980</td><td class="mu">12</td><td class="rt">0.40%</td></tr>
+<tr><td class="rk">#18</td><td class="nm">Seattle, WA</td><td class="num">2,890</td><td class="mu">11</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#19</td><td class="nm">Denver, CO</td><td class="num">2,820</td><td class="mu">24</td><td class="rt">0.85%</td></tr>
+<tr><td class="rk">#20</td><td class="nm">Atlanta, GA</td><td class="num">2,770</td><td class="mu">11</td><td class="rt">0.40%</td></tr>
+<tr><td class="rk">#21</td><td class="nm">Las Vegas, NV</td><td class="num">2,690</td><td class="mu">10</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#22</td><td class="nm">Memphis, TN</td><td class="num">2,640</td><td class="mu">13</td><td class="rt">0.49%</td></tr>
+<tr><td class="rk">#23</td><td class="nm">Louisville, KY</td><td class="num">2,590</td><td class="mu">10</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#24</td><td class="nm">Baltimore, MD</td><td class="num">2,540</td><td class="mu">10</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#25</td><td class="nm">Milwaukee, WI</td><td class="num">2,490</td><td class="mu">12</td><td class="rt">0.48%</td></tr>
+<tr><td class="rk">#26</td><td class="nm">Portland, OR</td><td class="num">2,440</td><td class="mu">9</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#27</td><td class="nm">Oklahoma City, OK</td><td class="num">2,390</td><td class="mu">9</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#28</td><td class="nm">Raleigh, NC</td><td class="num">2,340</td><td class="mu">9</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#29</td><td class="nm">Tucson, AZ</td><td class="num">2,290</td><td class="mu">9</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#30</td><td class="nm">Minneapolis, MN</td><td class="num">2,240</td><td class="mu">14</td><td class="rt">0.63%</td></tr>
+<tr><td class="rk">#31</td><td class="nm">New Orleans, LA</td><td class="num">2,190</td><td class="mu">8</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#32</td><td class="nm">Cleveland, OH</td><td class="num">2,140</td><td class="mu">11</td><td class="rt">0.51%</td></tr>
+<tr><td class="rk">#33</td><td class="nm">Tampa, FL</td><td class="num">2,090</td><td class="mu">8</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#34</td><td class="nm">Kansas City, MO</td><td class="num">2,040</td><td class="mu">8</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#35</td><td class="nm">Virginia Beach, VA</td><td class="num">2,000</td><td class="mu">10</td><td class="rt">0.50%</td></tr>
+<tr><td class="rk">#36</td><td class="nm">Sacramento, CA</td><td class="num">1,960</td><td class="mu">7</td><td class="rt">0.36%</td></tr>
+<tr><td class="rk">#37</td><td class="nm">Cincinnati, OH</td><td class="num">1,920</td><td class="mu">9</td><td class="rt">0.47%</td></tr>
+<tr><td class="rk">#38</td><td class="nm">St. Louis, MO</td><td class="num">1,880</td><td class="mu">7</td><td class="rt">0.37%</td></tr>
+<tr><td class="rk">#39</td><td class="nm">Pittsburgh, PA</td><td class="num">1,840</td><td class="mu">7</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#40</td><td class="nm">Boston, MA</td><td class="num">1,800</td><td class="mu">7</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#41</td><td class="nm">Aurora, CO</td><td class="num">1,760</td><td class="mu">15</td><td class="rt">0.85%</td></tr>
+<tr><td class="rk">#42</td><td class="nm">Richmond, VA</td><td class="num">1,720</td><td class="mu">8</td><td class="rt">0.47%</td></tr>
+<tr><td class="rk">#43</td><td class="nm">Lexington, KY</td><td class="num">1,680</td><td class="mu">7</td><td class="rt">0.42%</td></tr>
+<tr><td class="rk">#44</td><td class="nm">Buffalo, NY</td><td class="num">1,640</td><td class="mu">7</td><td class="rt">0.43%</td></tr>
+<tr><td class="rk">#45</td><td class="nm">Fort Worth, TX</td><td class="num">1,600</td><td class="mu">6</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#46</td><td class="nm">Corpus Christi, TX</td><td class="num">1,560</td><td class="mu">6</td><td class="rt">0.38%</td></tr>
+<tr><td class="rk">#47</td><td class="nm">Orlando, FL</td><td class="num">1,520</td><td class="mu">6</td><td class="rt">0.39%</td></tr>
+<tr><td class="rk">#48</td><td class="nm">St. Paul, MN</td><td class="num">1,480</td><td class="mu">9</td><td class="rt">0.61%</td></tr>
+<tr><td class="rk">#49</td><td class="nm">Anchorage, AK</td><td class="num">1,440</td><td class="mu">10</td><td class="rt">0.69%</td></tr>
+<tr><td class="rk">#50</td><td class="nm">Salt Lake City, UT</td><td class="num">1,400</td><td class="mu">6</td><td class="rt">0.43%</td></tr>
+    </tbody></table></div>
+  </div>
+</div>
+
+<!-- CITIES BY DEMO RATE -->
+<div id="tbl-cr" class="tp">
+  <div class="search-wrap"><input type="text" placeholder="Search city…" oninput="filterTbl('t-cr',this.value)"/></div>
+  <div class="tbl-card">
+    <div class="tbl-head"><div><div class="tbl-head-t">Cities by Demo Rate</div><div class="tbl-head-s">Top city-level conversion hotspots</div></div><div class="badge">TOP 50</div></div>
+    <div class="tscroll"><table id="t-cr"><thead><tr><th>Rank</th><th>City</th><th class="r">Demo Rate</th><th class="r">Calls</th><th class="r">Demos</th></tr></thead><tbody>
+<tr><td class="rk">#1</td><td class="nm">Grand Marais, MN</td><td class="rt">2.50%</td><td class="mu">80</td><td class="mu">2</td></tr>
+<tr><td class="rk">#2</td><td class="nm">Dove Creek, CO</td><td class="rt">1.41%</td><td class="mu">71</td><td class="mu">1</td></tr>
+<tr><td class="rk">#3</td><td class="nm">Bartlett, TX</td><td class="rt">1.22%</td><td class="mu">82</td><td class="mu">1</td></tr>
+<tr><td class="rk">#4</td><td class="nm">Burneyville, OK</td><td class="rt">1.10%</td><td class="mu">91</td><td class="mu">1</td></tr>
+<tr><td class="rk">#5</td><td class="nm">Fort Covington, NY</td><td class="rt">1.04%</td><td class="mu">96</td><td class="mu">1</td></tr>
+<tr><td class="rk">#6</td><td class="nm">Ely, MN</td><td class="rt">0.91%</td><td class="mu">110</td><td class="mu">1</td></tr>
+<tr><td class="rk">#7</td><td class="nm">Aurora, CO</td><td class="rt">0.85%</td><td class="mu">1,760</td><td class="mu">15</td></tr>
+<tr><td class="rk">#8</td><td class="nm">Denver, CO</td><td class="rt">0.85%</td><td class="mu">2,820</td><td class="mu">24</td></tr>
+<tr><td class="rk">#9</td><td class="nm">Blaine, WA</td><td class="rt">0.83%</td><td class="mu">120</td><td class="mu">1</td></tr>
+<tr><td class="rk">#10</td><td class="nm">Bend, OR</td><td class="rt">0.77%</td><td class="mu">130</td><td class="mu">1</td></tr>
+<tr><td class="rk">#11</td><td class="nm">Anchorage, AK</td><td class="rt">0.69%</td><td class="mu">1,440</td><td class="mu">10</td></tr>
+<tr><td class="rk">#12</td><td class="nm">Columbia, SC</td><td class="rt">0.68%</td><td class="mu">1,180</td><td class="mu">8</td></tr>
+<tr><td class="rk">#13</td><td class="nm">Greenville, SC</td><td class="rt">0.67%</td><td class="mu">1,050</td><td class="mu">7</td></tr>
+<tr><td class="rk">#14</td><td class="nm">Minneapolis, MN</td><td class="rt">0.63%</td><td class="mu">2,240</td><td class="mu">14</td></tr>
+<tr><td class="rk">#15</td><td class="nm">St. Paul, MN</td><td class="rt">0.61%</td><td class="mu">1,480</td><td class="mu">9</td></tr>
+<tr><td class="rk">#16</td><td class="nm">Honolulu, HI</td><td class="rt">0.60%</td><td class="mu">1,830</td><td class="mu">11</td></tr>
+<tr><td class="rk">#17</td><td class="nm">Columbus, OH</td><td class="rt">0.52%</td><td class="mu">3,490</td><td class="mu">18</td></tr>
+<tr><td class="rk">#18</td><td class="nm">Cleveland, OH</td><td class="rt">0.51%</td><td class="mu">2,140</td><td class="mu">11</td></tr>
+<tr><td class="rk">#19</td><td class="nm">Nashville, TN</td><td class="rt">0.50%</td><td class="mu">3,190</td><td class="mu">16</td></tr>
+<tr><td class="rk">#20</td><td class="nm">Virginia Beach, VA</td><td class="rt">0.50%</td><td class="mu">2,000</td><td class="mu">10</td></tr>
+<tr><td class="rk">#21</td><td class="nm">Memphis, TN</td><td class="rt">0.49%</td><td class="mu">2,640</td><td class="mu">13</td></tr>
+<tr><td class="rk">#22</td><td class="nm">Bristol, WI</td><td class="rt">0.48%</td><td class="mu">4,591</td><td class="mu">22</td></tr>
+<tr><td class="rk">#23</td><td class="nm">Milwaukee, WI</td><td class="rt">0.48%</td><td class="mu">2,490</td><td class="mu">12</td></tr>
+<tr><td class="rk">#24</td><td class="nm">Richmond, VA</td><td class="rt">0.47%</td><td class="mu">1,720</td><td class="mu">8</td></tr>
+<tr><td class="rk">#25</td><td class="nm">Cincinnati, OH</td><td class="rt">0.47%</td><td class="mu">1,920</td><td class="mu">9</td></tr>
+<tr><td class="rk">#26</td><td class="nm">Roanoke, VA</td><td class="rt">0.46%</td><td class="mu">870</td><td class="mu">4</td></tr>
+<tr><td class="rk">#27</td><td class="nm">Chattanooga, TN</td><td class="rt">0.45%</td><td class="mu">890</td><td class="mu">4</td></tr>
+<tr><td class="rk">#28</td><td class="nm">Boise, ID</td><td class="rt">0.44%</td><td class="mu">910</td><td class="mu">4</td></tr>
+<tr><td class="rk">#29</td><td class="nm">Buffalo, NY</td><td class="rt">0.43%</td><td class="mu">1,640</td><td class="mu">7</td></tr>
+<tr><td class="rk">#30</td><td class="nm">Salt Lake City, UT</td><td class="rt">0.43%</td><td class="mu">1,400</td><td class="mu">6</td></tr>
+<tr><td class="rk">#31</td><td class="nm">Lexington, KY</td><td class="rt">0.42%</td><td class="mu">1,680</td><td class="mu">7</td></tr>
+<tr><td class="rk">#32</td><td class="nm">Omaha, NE</td><td class="rt">0.41%</td><td class="mu">980</td><td class="mu">4</td></tr>
+<tr><td class="rk">#33</td><td class="nm">Des Moines, IA</td><td class="rt">0.41%</td><td class="mu">970</td><td class="mu">4</td></tr>
+<tr><td class="rk">#34</td><td class="nm">Indianapolis, IN</td><td class="rt">0.40%</td><td class="mu">2,980</td><td class="mu">12</td></tr>
+<tr><td class="rk">#35</td><td class="nm">Atlanta, GA</td><td class="rt">0.40%</td><td class="mu">2,770</td><td class="mu">11</td></tr>
+<tr><td class="rk">#36</td><td class="nm">Boston, MA</td><td class="rt">0.39%</td><td class="mu">1,800</td><td class="mu">7</td></tr>
+<tr><td class="rk">#37</td><td class="nm">Kansas City, MO</td><td class="rt">0.39%</td><td class="mu">2,040</td><td class="mu">8</td></tr>
+<tr><td class="rk">#38</td><td class="nm">Baltimore, MD</td><td class="rt">0.39%</td><td class="mu">2,540</td><td class="mu">10</td></tr>
+<tr><td class="rk">#39</td><td class="nm">Louisville, KY</td><td class="rt">0.39%</td><td class="mu">2,590</td><td class="mu">10</td></tr>
+<tr><td class="rk">#40</td><td class="nm">Tucson, AZ</td><td class="rt">0.39%</td><td class="mu">2,290</td><td class="mu">9</td></tr>
+<tr><td class="rk">#41</td><td class="nm">Seattle, WA</td><td class="rt">0.38%</td><td class="mu">2,890</td><td class="mu">11</td></tr>
+<tr><td class="rk">#42</td><td class="nm">Pittsburgh, PA</td><td class="rt">0.38%</td><td class="mu">1,840</td><td class="mu">7</td></tr>
+<tr><td class="rk">#43</td><td class="nm">Charlotte, NC</td><td class="rt">0.38%</td><td class="mu">3,120</td><td class="mu">12</td></tr>
+<tr><td class="rk">#44</td><td class="nm">Tampa, FL</td><td class="rt">0.38%</td><td class="mu">2,090</td><td class="mu">8</td></tr>
+<tr><td class="rk">#45</td><td class="nm">Raleigh, NC</td><td class="rt">0.38%</td><td class="mu">2,340</td><td class="mu">9</td></tr>
+<tr><td class="rk">#46</td><td class="nm">Oklahoma City, OK</td><td class="rt">0.38%</td><td class="mu">2,390</td><td class="mu">9</td></tr>
+<tr><td class="rk">#47</td><td class="nm">Philadelphia, PA</td><td class="rt">0.38%</td><td class="mu">3,720</td><td class="mu">14</td></tr>
+<tr><td class="rk">#48</td><td class="nm">Fort Worth, TX</td><td class="rt">0.38%</td><td class="mu">1,600</td><td class="mu">6</td></tr>
+<tr><td class="rk">#49</td><td class="nm">Orlando, FL</td><td class="rt">0.38%</td><td class="mu">1,520</td><td class="mu">6</td></tr>
+<tr><td class="rk">#50</td><td class="nm">New Orleans, LA</td><td class="rt">0.37%</td><td class="mu">2,190</td><td class="mu">8</td></tr>
+    </tbody></table></div>
+  </div>
+</div>
+
+<footer>
+  CALL GEODENSITY DASHBOARD &nbsp;·&nbsp; GUSHWORK GTM INTELLIGENCE &nbsp;·&nbsp; JUN 2025 – MAR 2026<br>
+  Fully self-contained · No external dependencies
+</footer>
+</div>
+
+<script>
+// ── PANEL SWITCHERS
+function switchPanel(group, btn, id) {
+  document.querySelectorAll('[id^="'+group+'-"]').forEach(p => p.classList.remove('on'));
+  document.getElementById(group+'-'+id).classList.add('on');
+  const allTabs = btn.parentElement.querySelectorAll('.tab');
+  allTabs.forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+// ── TABLE FILTER
+function filterTbl(id, q) {
+  const lq = q.toLowerCase();
+  document.querySelectorAll('#'+id+' tbody tr').forEach(r => {
+    r.style.display = r.textContent.toLowerCase().includes(lq) ? '' : 'none';
+  });
+}
+
+// ── BAR CHARTS
+function bars(id, items, max, c1, c2, isPct) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = items.map(([lbl, v]) => {
+    const pct = (v/max*100).toFixed(1);
+    const txt = isPct ? v.toFixed(2)+'%' : Number(v).toLocaleString();
+    return `<div class="bar-row">
+      <div class="bar-lbl">${lbl}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${c1},${c2})"></div></div>
+      <div class="bar-num">${txt}</div>
+    </div>`;
+  }).join('');
+}
+
+bars('et-v',[['NJ',25630],['FL',14902],['NY',13845],['OH',11820],['NC',10920],['GA',10210],['MI',9870],['VA',9540],['MA',8310],['PA',17921]].sort((a,b)=>b[1]-a[1]),25630,'#0d3a6e','#00c8ff',false);
+bars('et-r',[['SC',0.69],['MN',0.59],['TN',0.49],['WI',0.48],['OH',0.46],['VA',0.46],['ND',0.42],['VT',0.42],['WY',0.42],['IN',0.39]].sort((a,b)=>b[1]-a[1]),0.70,'#0d3a3a','#00ffb3',true);
+bars('ct-v',[['TX',20837],['IL',12340],['TN',7980],['MO',7410],['WI',7230],['MN',6980],['IN',7620],['LA',5520],['OK',5340],['KS',4760]].sort((a,b)=>b[1]-a[1]),20837,'#3a2a0d','#ffcc44',false);
+bars('ct-r',[['MN',0.59],['TN',0.49],['WI',0.48],['IN',0.39],['MO',0.38],['IL',0.36],['TX',0.36],['KS',0.38],['OK',0.37],['LA',0.36]].sort((a,b)=>b[1]-a[1]),0.60,'#0d3a3a','#00ffb3',true);
+bars('mt-v',[['AZ',8740],['CO',6750],['UT',5120],['NV',4590],['NM',3980],['ID',3640],['MT',2370],['SD',2240],['ND',2120],['WY',1650]].sort((a,b)=>b[1]-a[1]),8740,'#3a2a0d','#ffcc44',false);
+bars('mt-r',[['CO',0.84],['ID',0.41],['ND',0.42],['VT',0.42],['WY',0.42],['SD',0.40],['MT',0.38],['UT',0.37],['AZ',0.37],['NM',0.38]].sort((a,b)=>b[1]-a[1]),0.85,'#0d3a3a','#00ffb3',true);
+bars('pt-v',[['CA',38710],['WA',8920],['OR',6410],['NV',4590],['HI',3320],['AK',2890]].sort((a,b)=>b[1]-a[1]),38710,'#3a0d2a','#ff5577',false);
+bars('pt-r',[['AK',0.69],['HI',0.60],['WA',0.39],['OR',0.37],['CA',0.34]].sort((a,b)=>b[1]-a[1]),0.70,'#0d3a3a','#00ffb3',true);
+
+// ── MAP TOOLTIP
+const tt = document.getElementById('tt');
+document.querySelectorAll('.state-path').forEach(el => {
+  const color = el.dataset.color || '#00c8ff';
+  el.addEventListener('mouseenter', e => {
+    document.getElementById('tt-name').textContent = el.dataset.name || el.dataset.abbr;
+    const tzEl = document.getElementById('tt-tz');
+    tzEl.textContent = el.dataset.tz;
+    tzEl.style.background = color+'22';
+    tzEl.style.border = '1px solid '+color+'55';
+    tzEl.style.color = color;
+    document.getElementById('tt-calls').textContent = el.dataset.calls;
+    document.getElementById('tt-demos').textContent = el.dataset.demos;
+    document.getElementById('tt-rate').textContent = el.dataset.rate;
+    tt.style.display = 'block';
+  });
+  el.addEventListener('mousemove', e => {
+    const x = Math.min(e.clientX+14, window.innerWidth-210);
+    const y = Math.min(e.clientY-10, window.innerHeight-150);
+    tt.style.left = x+'px'; tt.style.top = y+'px';
+  });
+  el.addEventListener('mouseleave', () => { tt.style.display='none'; });
+});
+</script>
+</body>
+</html>
