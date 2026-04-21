@@ -111,7 +111,7 @@ export async function GET() {
         FROM gist.gtm_demo_bookings WHERE COALESCE(primary_domain,website_url,'') <> ''
       ),
       manual_domains AS (
-        SELECT unnest(ARRAY['deipower.com','thewindscreenfactory.net','krupa-services.com']) AS domain
+        SELECT unnest(ARRAY['deipower.com','thewindscreenfactory.net','krupa-services.com','lumi-star.com','tqfab.com','continental-ind.net']) AS domain
       ),
       all_outbound AS (
         SELECT domain FROM email_domains WHERE domain <> ''
@@ -141,6 +141,9 @@ export async function GET() {
     const manualCloses = [
       { date: "2026-04-16", domain: "lasermetalfab.com", ae: "arabind.mishra@gushwork.ai", price: 400 },
       { date: "2026-04-20", domain: "krupa-services.com", ae: "abhinav.chaturvedi@gushwork.ai", price: 520 },
+      { date: "2026-04-20", domain: "lumi-star.com", ae: "nitin.philip@gushwork.ai", price: 800 },
+      { date: "2026-04-20", domain: "tqfab.com", ae: "manideep.reddy@gushwork.ai", price: 800 },
+      { date: "2026-04-20", domain: "continental-ind.net", ae: "abhinav.chaturvedi@gushwork.ai", price: 1200 },
     ];
 
     // Build closes + ARR per day
