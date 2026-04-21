@@ -57,74 +57,6 @@ export async function GET() {
       ORDER BY 1
     `);
 
-    // Closes — outbound only (onboarding joined with all outbound domains + manual overrides)
-    // Include future dates within the month
-    const closesResult = await client.query(`
-      WITH onboardings AS (
-        SELECT
-          "AE_Name" AS ae,
-          LOWER(
-            REGEXP_REPLACE(
-              SPLIT_PART(
-                REPLACE(REPLACE("Domain_Name", 'https://', ''), 'http://', ''),
-                '/',
-                1
-              ),
-              '^www\\.', ''
-            )
-          ) AS domain,
-          TO_DATE("Onboarding_Call_Date", 'YYYY-MM-DD') AS onboarding_date,
-          CAST(
-            REGEXP_REPLACE("Initial_Subscription_Package_Month", '[^0-9]', '', 'g')
-            AS INTEGER
-          ) AS monthly_price
-        FROM airbyte_ingestion."Onboarding_Tracker"
-        WHERE TO_DATE("Onboarding_Call_Date", 'YYYY-MM-DD') >= DATE_TRUNC('month', CURRENT_DATE)::date
-          AND TO_DATE("Onboarding_Call_Date", 'YYYY-MM-DD') < DATE_TRUNC('month', CURRENT_DATE)::date + INTERVAL '1 month'
-          AND "Status" IN ('Active', 'To be Onboarded')
-      ),
-      email_domains AS (
-        SELECT DISTINCT
-          LOWER(REGEXP_REPLACE(SPLIT_PART(REPLACE(REPLACE(sl.lead_website,'https://',''),'http://',''),'/','1'),'^www\\.','')) AS domain
-        FROM gist.justcall_burner_email_call_logs jc
-        JOIN gist.gtm_smartlead_leads sl ON LOWER(TRIM(jc.contact_email)) = LOWER(TRIM(sl.lead_email))
-        WHERE sl.lead_website IS NOT NULL
-      ),
-      phone_domains AS (
-        SELECT DISTINCT
-          LOWER(REGEXP_REPLACE(SPLIT_PART(REPLACE(REPLACE(sl.lead_website,'https://',''),'http://',''),'/','1'),'^www\\.','')) AS domain
-        FROM gist.justcall_burner_email_call_logs jc
-        JOIN gist.gtm_smartlead_leads sl
-          ON REGEXP_REPLACE(jc.contact_number,'\\D','','g') =
-            CASE
-              WHEN LENGTH(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number,''),',',1),'\\D','','g'))=10
-                THEN '1'||REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number,''),',',1),'\\D','','g')
-              WHEN LENGTH(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number,''),',',1),'\\D','','g'))=11
-                THEN REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number,''),',',1),'\\D','','g')
-              ELSE NULL
-            END
-        WHERE sl.lead_website IS NOT NULL AND jc.contact_number IS NOT NULL
-      ),
-      booking_domains AS (
-        SELECT DISTINCT
-          LOWER(REGEXP_REPLACE(SPLIT_PART(REPLACE(REPLACE(COALESCE(primary_domain,website_url,''),'https://',''),'http://',''),'/','1'),'^www\\.','')) AS domain
-        FROM gist.gtm_demo_bookings WHERE COALESCE(primary_domain,website_url,'') <> ''
-      ),
-      manual_domains AS (
-        SELECT unnest(ARRAY['deipower.com','thewindscreenfactory.net','krupa-services.com','lumi-star.com','tqfab.com','continental-ind.net']) AS domain
-      ),
-      all_outbound AS (
-        SELECT domain FROM email_domains WHERE domain <> ''
-        UNION SELECT domain FROM phone_domains WHERE domain <> ''
-        UNION SELECT domain FROM booking_domains WHERE domain <> ''
-        UNION SELECT domain FROM manual_domains
-      )
-      SELECT o.onboarding_date AS date, o.ae, o.domain, o.monthly_price AS price
-      FROM onboardings o
-      JOIN all_outbound a ON o.domain = a.domain
-      ORDER BY o.onboarding_date
-    `);
-
     // Build showups map
     const showupsMap: Record<string, number> = {};
     for (const r of showupsResult.rows) {
@@ -137,18 +69,31 @@ export async function GET() {
       demosMap[String(r.date)] = Number(r.demos);
     }
 
-    // Manual closes (no onboarding date in DB)
-    const manualCloses = [
-      { date: "2026-04-16", domain: "lasermetalfab.com", ae: "arabind.mishra@gushwork.ai", price: 400 },
-      { date: "2026-04-20", domain: "krupa-services.com", ae: "abhinav.chaturvedi@gushwork.ai", price: 520 },
-      { date: "2026-04-20", domain: "lumi-star.com", ae: "nitin.philip@gushwork.ai", price: 800 },
-      { date: "2026-04-20", domain: "tqfab.com", ae: "manideep.reddy@gushwork.ai", price: 800 },
-      { date: "2026-04-20", domain: "continental-ind.net", ae: "abhinav.chaturvedi@gushwork.ai", price: 1200 },
+    // Outbound closes — hardcoded list (18 closes)
+    const allCloses = [
+      { date: "2026-04-03", price: 800 },   // M2 Antenna Systems - Arabind
+      { date: "2026-04-01", price: 800 },   // Engineered Roofing Systems - Mani
+      { date: "2026-04-06", price: 800 },   // CNC Programming Solutions - Abhinav
+      { date: "2026-04-08", price: 1540 },  // DEI Power - Abhinav
+      { date: "2026-04-08", price: 600 },   // MTS Forge - Mani
+      { date: "2026-04-09", price: 1500 },  // Specgas - Ajith
+      { date: "2026-04-15", price: 550 },   // Marseng - Abhinav
+      { date: "2026-04-16", price: 800 },   // Windscreen Factory - Abhinav
+      { date: "2026-04-14", price: 800 },   // Mansfieldec - Abhinav
+      { date: "2026-04-14", price: 800 },   // ESG International - Arabind
+      { date: "2026-04-20", price: 500 },   // Artesian Systems - Abhinav
+      { date: "2026-04-20", price: 1000 },  // Nidra Pack - Mani
+      { date: "2026-04-22", price: 600 },   // Corpus Christi Sign - Nitin
+      { date: "2026-04-16", price: 400 },   // Laser Metal Fabrication - Arabind
+      { date: "2026-04-20", price: 520 },   // Krupa Services - Abhinav
+      { date: "2026-04-20", price: 800 },   // Lumi Star - Nitin
+      { date: "2026-04-20", price: 800 },   // TQ Fab - Mani
+      { date: "2026-04-20", price: 1200 },  // Continental Ind - Abhinav
     ];
 
     // Build closes + ARR per day
     const closesMap: Record<string, { count: number; arr: number }> = {};
-    for (const r of [...closesResult.rows, ...manualCloses]) {
+    for (const r of allCloses) {
       const d = String(r.date);
       const price = Number(r.price) || 0;
       if (!closesMap[d]) closesMap[d] = { count: 0, arr: 0 };
