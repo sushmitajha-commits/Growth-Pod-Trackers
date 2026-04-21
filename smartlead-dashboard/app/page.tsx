@@ -286,7 +286,7 @@ export default function Dashboard() {
               className="h-5 opacity-80"
             />
             <div className="w-px h-4 bg-white/[0.08]" />
-            <span className="text-[12px] text-white/30 tracking-tight">GTM Dashboard</span>
+            <span className="text-[12px] text-white/30 tracking-tight">GTM Dashboard Conservative</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
