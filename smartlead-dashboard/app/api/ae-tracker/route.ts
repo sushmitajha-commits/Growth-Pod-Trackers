@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -11,87 +11,87 @@ const MONTHLY_TARGETS: Record<string, {
   "2026-05": { showups: 148, demos: 370, closes: 17, arr: 141038, workingDays: 21 },
 };
 
-function getTargets() {
-  const month = new Date().toISOString().substring(0, 7);
+function defaultFrom() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function getTargets(toDate: string) {
+  const month = toDate.substring(0, 7);
   return MONTHLY_TARGETS[month] || MONTHLY_TARGETS["2026-04"];
 }
 
-export async function GET() {
-  const client = await pool.connect();
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const from = searchParams.get("from") || defaultFrom();
+  const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
+
   try {
-    await client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+    const [showupsRes, demosRes] = await Promise.all([
+      pool.query(
+        `
+        SELECT
+          DATE(to_timestamp(start_time / 1000)) AS date,
+          COUNT(*) AS showups
+        FROM gist.sybill_meetings
+        WHERE start_time IS NOT NULL
+          AND LOWER(title) LIKE '%digital strategy%'
+          AND DATE(to_timestamp(start_time / 1000)) BETWEEN $1::date AND $2::date
+        GROUP BY 1
+        ORDER BY 1
+        `,
+        [from, to]
+      ),
+      pool.query(
+        `
+        SELECT
+          demo_scheduled_date::date AS date,
+          COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos
+        FROM gist.gtm_demo_bookings
+        WHERE demo_scheduled_date IS NOT NULL
+          AND demo_scheduled_date::date >= GREATEST($1::date, '2026-04-14'::date)
+          AND demo_scheduled_date::date <= $2::date
+        GROUP BY 1
+        ORDER BY 1
+        `,
+        [from, to]
+      ),
+    ]);
 
-    // Showups per day (sybill_meetings)
-    const showupsResult = await client.query(`
-      SELECT
-        DATE(to_timestamp(start_time / 1000)) AS date,
-        COUNT(*) AS showups
-      FROM gist.sybill_meetings
-      WHERE start_time IS NOT NULL
-        AND LOWER(title) LIKE '%digital strategy%'
-        AND DATE(to_timestamp(start_time / 1000)) >= DATE_TRUNC('month', CURRENT_DATE)::date
-        AND DATE(to_timestamp(start_time / 1000)) < CURRENT_DATE
-      GROUP BY 1
-      ORDER BY 1
-    `);
+    const showupsMap: Record<string, number> = {};
+    for (const r of showupsRes.rows) showupsMap[String(r.date)] = Number(r.showups);
 
-    // Demos scheduled per day — hardcoded Apr 1-13, DB from Apr 14 (distinct, latest per account)
+    // Demos scheduled hardcoded for Apr 1-13 (DB starts Apr 14)
     const demosScheduledHardcoded: Record<string, number> = {
       "2026-04-01": 28, "2026-04-02": 19, "2026-04-03": 13,
       "2026-04-06": 24, "2026-04-07": 27, "2026-04-08": 25,
       "2026-04-09": 21, "2026-04-10": 28, "2026-04-13": 21,
     };
-    const demosResult = await client.query(`
-      SELECT
-        demo_scheduled_date::date AS date,
-        COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos
-      FROM (
-        SELECT account_name, demo_scheduled_date,
-          ROW_NUMBER() OVER (PARTITION BY LOWER(TRIM(account_name)) ORDER BY demo_scheduled_date DESC) AS rn
-        FROM gist.gtm_demo_bookings
-        WHERE demo_scheduled_date IS NOT NULL
-          AND demo_scheduled_date::date >= '2026-04-14'
-          AND demo_scheduled_date::date < CURRENT_DATE
-      ) t WHERE rn = 1
-      GROUP BY 1
-      ORDER BY 1
-    `);
-
-    // Build showups map
-    const showupsMap: Record<string, number> = {};
-    for (const r of showupsResult.rows) {
-      showupsMap[String(r.date)] = Number(r.showups);
-    }
-
-    // Build demos map (hardcoded + DB)
     const demosMap: Record<string, number> = { ...demosScheduledHardcoded };
-    for (const r of demosResult.rows) {
-      demosMap[String(r.date)] = Number(r.demos);
-    }
+    for (const r of demosRes.rows) demosMap[String(r.date)] = Number(r.demos);
 
-    // Outbound closes — hardcoded list (18 closes)
+    // Outbound closes — hardcoded
     const allCloses = [
-      { date: "2026-04-03", price: 800 },   // M2 Antenna Systems - Arabind
-      { date: "2026-04-01", price: 800 },   // Engineered Roofing Systems - Mani
-      { date: "2026-04-06", price: 800 },   // CNC Programming Solutions - Abhinav
-      { date: "2026-04-08", price: 1540 },  // DEI Power - Abhinav
-      { date: "2026-04-08", price: 600 },   // MTS Forge - Mani
-      { date: "2026-04-09", price: 1500 },  // Specgas - Ajith
-      { date: "2026-04-15", price: 550 },   // Marseng - Abhinav
-      { date: "2026-04-16", price: 800 },   // Windscreen Factory - Abhinav
-      { date: "2026-04-14", price: 800 },   // Mansfieldec - Abhinav
-      { date: "2026-04-14", price: 800 },   // ESG International - Arabind
-      { date: "2026-04-20", price: 500 },   // Artesian Systems - Abhinav
-      { date: "2026-04-20", price: 1000 },  // Nidra Pack - Mani
-      { date: "2026-04-22", price: 600 },   // Corpus Christi Sign - Nitin
-      { date: "2026-04-16", price: 400 },   // Laser Metal Fabrication - Arabind
-      { date: "2026-04-20", price: 520 },   // Krupa Services - Abhinav
-      { date: "2026-04-20", price: 800 },   // Lumi Star - Nitin
-      { date: "2026-04-20", price: 800 },   // TQ Fab - Mani
-      { date: "2026-04-20", price: 1200 },  // Continental Ind - Abhinav
+      { date: "2026-04-03", price: 800 },
+      { date: "2026-04-01", price: 800 },
+      { date: "2026-04-06", price: 800 },
+      { date: "2026-04-08", price: 1540 },
+      { date: "2026-04-08", price: 600 },
+      { date: "2026-04-09", price: 1500 },
+      { date: "2026-04-15", price: 550 },
+      { date: "2026-04-16", price: 800 },
+      { date: "2026-04-14", price: 800 },
+      { date: "2026-04-14", price: 800 },
+      { date: "2026-04-20", price: 500 },
+      { date: "2026-04-20", price: 1000 },
+      { date: "2026-04-22", price: 600 },
+      { date: "2026-04-16", price: 400 },
+      { date: "2026-04-20", price: 520 },
+      { date: "2026-04-20", price: 800 },
+      { date: "2026-04-20", price: 800 },
+      { date: "2026-04-20", price: 1200 },
     ];
 
-    // Build closes + ARR per day
     const closesMap: Record<string, { count: number; arr: number }> = {};
     for (const r of allCloses) {
       const d = String(r.date);
@@ -101,11 +101,12 @@ export async function GET() {
       closesMap[d].arr += price * 12;
     }
 
-    // Collect all working days (Mon-Fri only)
+    // Restrict every contributor map to the requested range
+    const inRange = (d: string) => d >= from && d <= to;
     const allDates = new Set<string>();
-    for (const d of Object.keys(showupsMap)) allDates.add(d);
-    for (const d of Object.keys(demosMap)) allDates.add(d);
-    for (const d of Object.keys(closesMap)) allDates.add(d);
+    for (const d of Object.keys(showupsMap)) if (inRange(d)) allDates.add(d);
+    for (const d of Object.keys(demosMap)) if (inRange(d)) allDates.add(d);
+    for (const d of Object.keys(closesMap)) if (inRange(d)) allDates.add(d);
 
     const isWeekday = (d: string) => {
       const day = new Date(d + "T12:00:00").getDay();
@@ -114,7 +115,7 @@ export async function GET() {
 
     const sortedDates = Array.from(allDates).filter(isWeekday).sort();
 
-    const t = getTargets();
+    const t = getTargets(to);
     let showupsMtd = 0;
     let demosMtd = 0;
     let closesMtd = 0;
@@ -133,8 +134,6 @@ export async function GET() {
       arrMtd += dayArr;
       dayIndex++;
 
-      const showupTargetTillDate = Math.round((t.showups / t.workingDays) * dayIndex);
-      const demoTargetTillDate = Math.round((t.demos / t.workingDays) * dayIndex);
       const closesTargetTillDate = Math.round((t.closes / t.workingDays) * dayIndex);
       const arrTargetTillDate = Math.round((t.arr / t.workingDays) * dayIndex);
 
@@ -168,7 +167,5 @@ export async function GET() {
     console.error(err);
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
-  } finally {
-    client.release();
   }
 }

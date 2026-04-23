@@ -44,156 +44,129 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get("from") || "2026-01-05";
   const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
 
-  const client = await pool.connect();
-  try {
-    await client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+  const statsQuery = `
+    SELECT
+      (sent_time AT TIME ZONE 'America/Los_Angeles')::date AS date,
+      COUNT(DISTINCT stats_id) AS total_sends,
+      COUNT(DISTINCT stats_id) FILTER (WHERE is_bounced = true) AS total_bounced,
+      ROUND(100.0 * COUNT(DISTINCT stats_id) FILTER (WHERE is_bounced = true)
+        / NULLIF(COUNT(DISTINCT stats_id), 0), 2) AS bounce_rate,
+      COUNT(DISTINCT LOWER(TRIM(lead_email))) FILTER (WHERE open_count >= 2) AS emails_2plus_opens,
+      ROUND(100.0 * COUNT(DISTINCT LOWER(TRIM(lead_email))) FILTER (WHERE open_count >= 2)
+        / NULLIF(COUNT(DISTINCT LOWER(TRIM(lead_email))), 0), 2) AS open_2plus_rate
+    FROM gist.gtm_email_campaign_stats
+    WHERE sent_time IS NOT NULL
+      AND (sent_time AT TIME ZONE 'America/Los_Angeles')::date BETWEEN $1::date AND $2::date
+      AND EXTRACT(DOW FROM (sent_time AT TIME ZONE 'America/Los_Angeles')::date) NOT IN (0, 6)
+    GROUP BY 1
+    ORDER BY 1 DESC
+  `;
 
-    // 1) Campaign stats per day (Pacific Time — captures full EST+PST business day)
-    const statsResult = await client.query(
-      `
-      WITH base AS (
-        SELECT
-          stats_id,
-          email_campaign_seq_id,
-          LOWER(TRIM(lead_email)) AS lead_email,
-          sent_time,
-          open_count,
-          reply_time,
-          is_bounced
-        FROM gist.gtm_email_campaign_stats
-        WHERE sent_time IS NOT NULL
-          AND (sent_time AT TIME ZONE 'America/Los_Angeles')::date >= $1::date
-          AND (sent_time AT TIME ZONE 'America/Los_Angeles')::date <= $2::date
-      )
-      SELECT
-        (sent_time AT TIME ZONE 'America/Los_Angeles')::date AS date,
-        COUNT(DISTINCT stats_id) AS total_sends,
-        COUNT(DISTINCT stats_id) FILTER (WHERE is_bounced = true) AS total_bounced,
-        ROUND(100.0 * COUNT(DISTINCT stats_id) FILTER (WHERE is_bounced = true)
-          / NULLIF(COUNT(DISTINCT stats_id), 0), 2) AS bounce_rate,
-        COUNT(DISTINCT lead_email) FILTER (WHERE open_count >= 2) AS emails_2plus_opens,
-        ROUND(100.0 * COUNT(DISTINCT lead_email) FILTER (WHERE open_count >= 2)
-          / NULLIF(COUNT(DISTINCT lead_email), 0), 2) AS open_2plus_rate
-      FROM base
-      WHERE EXTRACT(DOW FROM (sent_time AT TIME ZONE 'America/Los_Angeles')::date) NOT IN (0, 6)
-      GROUP BY 1
-      ORDER BY 1 DESC
-      `,
-      [from, to]
-    );
-
-    // 2) First-time >=2 opens: leads whose first ever >=2 open falls on that day, with a phone number
-    const noCallResult = await client.query(
-      `
-      WITH all_opens AS (
-        SELECT
-          LOWER(TRIM(lead_email)) AS norm_email,
-          (sent_time AT TIME ZONE 'America/Los_Angeles')::date AS date,
-          COALESCE(open_count, 0) AS open_count
-        FROM gist.gtm_email_campaign_stats
-        WHERE lead_email IS NOT NULL
-          AND TRIM(lead_email) <> ''
-          AND sent_time IS NOT NULL
-      ),
-      first_2plus_date AS (
-        SELECT
-          norm_email,
-          MIN(date) AS first_date
-        FROM all_opens
-        WHERE open_count >= 2
-        GROUP BY norm_email
-      )
-      SELECT
-        f.first_date AS date,
-        COUNT(DISTINCT f.norm_email) AS unique_2plus_no_call
-      FROM first_2plus_date f
-      JOIN gist.gtm_smartlead_leads sl
-        ON LOWER(TRIM(sl.lead_email)) = f.norm_email
-      WHERE f.first_date >= $1::date
-        AND f.first_date <= $2::date
-        AND sl.lead_phone_number IS NOT NULL
-        AND TRIM(sl.lead_phone_number) <> ''
-      GROUP BY f.first_date
-      ORDER BY f.first_date DESC
-      `,
-      [from, to]
-    );
-
-    // 3) Email health snapshot — disabled (columns removed)
-    const healthResult = { rows: [{}] };
-
-    // 4) Burner vs Non-Burner calls + demos
-    const callsResult = await client.query(
-      `
-      WITH smartlead_prepared AS (
-        SELECT sl.*,
-          CASE
-            WHEN LENGTH(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')) = 10
-              THEN '1' || REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')
-            WHEN LENGTH(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')) = 11
-              AND LEFT(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g'), 1) = '1'
-              THEN REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')
-            WHEN LENGTH(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')) > 11
-              THEN '1' || RIGHT(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g'), 10)
-            ELSE NULL
-          END AS norm_phone
-        FROM gist.gtm_smartlead_leads sl
-      ),
-      smartlead_dedup AS (
-        SELECT * FROM (
-          SELECT sp.lead_id, sp.norm_phone,
-            ROW_NUMBER() OVER (PARTITION BY sp.norm_phone ORDER BY sp.updated_at DESC NULLS LAST, sp.inserted_at DESC NULLS LAST) AS rn
-          FROM smartlead_prepared sp WHERE sp.norm_phone IS NOT NULL
-        ) t WHERE rn = 1
-      ),
-      calls_base AS (
-        SELECT jc.call_date, jc.cost_incurred, jc.disposition,
-          REGEXP_REPLACE(jc.contact_number, '\\D', '', 'g') AS norm_phone
-        FROM gist.justcall_burner_email_call_logs jc
-        WHERE jc.contact_number IS NOT NULL
-          AND COALESCE(jc.campaign_name, '') NOT ILIKE '%meta%'
-          AND COALESCE(jc.agent_name, '') NOT ILIKE '%allaine%'
-          AND jc.call_date >= $1::date AND jc.call_date <= $2::date
-      ),
-      calls_labeled AS (
-        SELECT cb.call_date, cb.cost_incurred,
-          CASE WHEN sl.lead_id IS NOT NULL THEN 'burner' ELSE 'non_burner' END AS burner_flag,
-          CASE WHEN cb.disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END AS is_demo_booked
-        FROM calls_base cb
-        LEFT JOIN smartlead_dedup sl ON cb.norm_phone = sl.norm_phone
-      )
-      SELECT
-        call_date,
-        COUNT(*) FILTER (WHERE burner_flag = 'burner') AS burner_calls,
-        COALESCE(SUM(is_demo_booked) FILTER (WHERE burner_flag = 'burner'), 0) AS burner_demos,
-        COUNT(*) FILTER (WHERE burner_flag = 'non_burner') AS non_burner_calls,
-        COALESCE(SUM(is_demo_booked) FILTER (WHERE burner_flag = 'non_burner'), 0) AS non_burner_demos,
-        COALESCE(SUM(cost_incurred) FILTER (WHERE burner_flag = 'burner'), 0) AS burner_cost
-      FROM calls_labeled
-      GROUP BY call_date
-      ORDER BY call_date DESC
-      `,
-      [from, to]
-    );
-
-    // 5) Total unique leads with >=2 opens across entire date range (for summary card)
-    const uniqueOpensResult = await client.query(
-      `
-      SELECT COUNT(DISTINCT LOWER(TRIM(lead_email))) AS total_unique_2plus
+  // Scope the heavy MIN aggregation: only consider leads that had >=2 opens within the
+  // requested range, then compute their first-ever >=2 date over full history. This
+  // avoids the prior full-table scan.
+  const noCallQuery = `
+    WITH leads_in_range AS (
+      SELECT DISTINCT LOWER(TRIM(lead_email)) AS norm_email
       FROM gist.gtm_email_campaign_stats
       WHERE lead_email IS NOT NULL
         AND TRIM(lead_email) <> ''
         AND COALESCE(open_count, 0) >= 2
-        AND (sent_time AT TIME ZONE 'America/Los_Angeles')::date >= $1::date
-        AND (sent_time AT TIME ZONE 'America/Los_Angeles')::date <= $2::date
-      `,
-      [from, to]
-    );
+        AND (sent_time AT TIME ZONE 'America/Los_Angeles')::date BETWEEN $1::date AND $2::date
+    ),
+    first_dates AS (
+      SELECT
+        LOWER(TRIM(s.lead_email)) AS norm_email,
+        MIN((s.sent_time AT TIME ZONE 'America/Los_Angeles')::date) AS first_date
+      FROM gist.gtm_email_campaign_stats s
+      JOIN leads_in_range l ON LOWER(TRIM(s.lead_email)) = l.norm_email
+      WHERE COALESCE(s.open_count, 0) >= 2
+        AND s.sent_time IS NOT NULL
+      GROUP BY 1
+    )
+    SELECT
+      fd.first_date AS date,
+      COUNT(DISTINCT fd.norm_email) AS unique_2plus_no_call
+    FROM first_dates fd
+    JOIN gist.gtm_smartlead_leads sl
+      ON LOWER(TRIM(sl.lead_email)) = fd.norm_email
+    WHERE fd.first_date BETWEEN $1::date AND $2::date
+      AND sl.lead_phone_number IS NOT NULL
+      AND TRIM(sl.lead_phone_number) <> ''
+    GROUP BY fd.first_date
+    ORDER BY fd.first_date DESC
+  `;
+
+  const callsQuery = `
+    WITH smartlead_prepared AS (
+      SELECT sl.lead_id, sl.updated_at, sl.inserted_at,
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')) = 10
+            THEN '1' || REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')
+          WHEN LENGTH(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')) = 11
+            AND LEFT(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g'), 1) = '1'
+            THEN REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')
+          WHEN LENGTH(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g')) > 11
+            THEN '1' || RIGHT(REGEXP_REPLACE(SPLIT_PART(COALESCE(sl.lead_phone_number, ''), ',', 1), '\\D', '', 'g'), 10)
+          ELSE NULL
+        END AS norm_phone
+      FROM gist.gtm_smartlead_leads sl
+    ),
+    smartlead_dedup AS (
+      SELECT lead_id, norm_phone FROM (
+        SELECT sp.lead_id, sp.norm_phone,
+          ROW_NUMBER() OVER (PARTITION BY sp.norm_phone ORDER BY sp.updated_at DESC NULLS LAST, sp.inserted_at DESC NULLS LAST) AS rn
+        FROM smartlead_prepared sp WHERE sp.norm_phone IS NOT NULL
+      ) t WHERE rn = 1
+    ),
+    calls_base AS (
+      SELECT jc.call_date, jc.cost_incurred, jc.disposition,
+        REGEXP_REPLACE(jc.contact_number, '\\D', '', 'g') AS norm_phone
+      FROM gist.justcall_burner_email_call_logs jc
+      WHERE jc.contact_number IS NOT NULL
+        AND COALESCE(jc.campaign_name, '') NOT ILIKE '%meta%'
+        AND COALESCE(jc.agent_name, '') NOT ILIKE '%allaine%'
+        AND jc.call_date BETWEEN $1::date AND $2::date
+    ),
+    calls_labeled AS (
+      SELECT cb.call_date, cb.cost_incurred,
+        CASE WHEN sl.lead_id IS NOT NULL THEN 'burner' ELSE 'non_burner' END AS burner_flag,
+        CASE WHEN cb.disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END AS is_demo_booked
+      FROM calls_base cb
+      LEFT JOIN smartlead_dedup sl ON cb.norm_phone = sl.norm_phone
+    )
+    SELECT
+      call_date,
+      COUNT(*) FILTER (WHERE burner_flag = 'burner') AS burner_calls,
+      COALESCE(SUM(is_demo_booked) FILTER (WHERE burner_flag = 'burner'), 0) AS burner_demos,
+      COUNT(*) FILTER (WHERE burner_flag = 'non_burner') AS non_burner_calls,
+      COALESCE(SUM(is_demo_booked) FILTER (WHERE burner_flag = 'non_burner'), 0) AS non_burner_demos,
+      COALESCE(SUM(cost_incurred) FILTER (WHERE burner_flag = 'burner'), 0) AS burner_cost
+    FROM calls_labeled
+    GROUP BY call_date
+    ORDER BY call_date DESC
+  `;
+
+  const uniqueOpensQuery = `
+    SELECT COUNT(DISTINCT LOWER(TRIM(lead_email))) AS total_unique_2plus
+    FROM gist.gtm_email_campaign_stats
+    WHERE lead_email IS NOT NULL
+      AND TRIM(lead_email) <> ''
+      AND COALESCE(open_count, 0) >= 2
+      AND (sent_time AT TIME ZONE 'America/Los_Angeles')::date BETWEEN $1::date AND $2::date
+  `;
+
+  try {
+    // Run all four queries in parallel — each acquires its own pooled client.
+    const [statsResult, noCallResult, callsResult, uniqueOpensResult] = await Promise.all([
+      pool.query(statsQuery, [from, to]),
+      pool.query(noCallQuery, [from, to]),
+      pool.query(callsQuery, [from, to]),
+      pool.query(uniqueOpensQuery, [from, to]),
+    ]);
+
     const totalUnique2Plus = Number(uniqueOpensResult.rows[0]?.total_unique_2plus ?? 0);
 
-    const health = healthResult.rows[0];
-
-    // Build lookup maps
     const noCallMap: Record<string, number> = {};
     for (const r of noCallResult.rows) {
       noCallMap[String(r.date)] = Number(r.unique_2plus_no_call);
@@ -227,15 +200,12 @@ export async function GET(req: NextRequest) {
       const demoCallRateNonBurner = c.non_burner_calls > 0
         ? Number(((c.non_burner_demos / c.non_burner_calls) * 100).toFixed(2)) : 0;
 
-      // Lift from Burner Email = % improvement of burner rate over non-burner rate
       const liftFromBurner = demoCallRateNonBurner > 0
         ? Number((((demoCallRateBurner - demoCallRateNonBurner) / demoCallRateNonBurner) * 100).toFixed(2)) : 0;
 
-      // If Burner Email Was Not There = hypothetical demos at non-burner rate
       const ifNoBurner = c.burner_calls > 0
         ? Math.round((demoCallRateNonBurner / 100) * c.burner_calls) : 0;
 
-      // Difference = actual burner demos - hypothetical
       const difference = c.burner_demos - ifNoBurner;
 
       return {
@@ -264,7 +234,5 @@ export async function GET(req: NextRequest) {
     console.error(err);
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
-  } finally {
-    client.release();
   }
 }

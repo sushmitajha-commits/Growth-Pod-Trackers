@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 
-// Showup targets for April (22 working days, target = 185, index 0 = day 1)
+// Showup targets for the month (22 working days, target = 185)
 const SHOWUP_TARGETS = Array.from({ length: 22 }, (_, i) => Math.round((185 / 22) * (i + 1)));
 
-// Demo plan targets for April (22 working days, target = 463)
+// Demo plan targets for the month (22 working days, target = 463)
 const DEMO_PLAN_TARGETS = Array.from({ length: 22 }, (_, i) => Math.round((463 / 22) * (i + 1)));
 
-// New contacts loaded: hardcoded Apr 1–14
+// New contacts loaded: hardcoded Apr 1–18
 const NEW_CONTACTS_MAP: Record<string, number> = {
   "2026-04-01": 4758,
   "2026-04-02": 3498,
@@ -28,111 +28,109 @@ const NEW_CONTACTS_MAP: Record<string, number> = {
 const MONTHLY_MAX_CONTACTS = 79000;
 const SHOWUP_PLAN = 185;
 const TOTAL_WORKING_DAYS = 22;
+const MONTH_CALL_TARGET = 92400;
+const MONTH_DEMO_PLAN = 463;
 
-export async function GET() {
-  const client = await pool.connect();
+function defaultFrom() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const from = searchParams.get("from") || defaultFrom();
+  const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
+
   try {
-    await client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
-
-    const result = await client.query(`
-      WITH daily_logs AS (
+    // Run the three queries in parallel — each acquires its own pooled client.
+    const [callsRes, showupsRes, demosRes] = await Promise.all([
+      pool.query(
+        `
+        WITH daily_logs AS (
+          SELECT
+            ((call_date::text || ' ' || call_time::text)::timestamp - interval '4 hours')::date AS date,
+            COUNT(*)                                                            AS total_calls,
+            SUM(CASE WHEN campaign_id IS NOT NULL THEN 1 ELSE 0 END)           AS sales_dialer_calls,
+            SUM(CASE WHEN campaign_id IS NULL     THEN 1 ELSE 0 END)           AS justcall_calls,
+            COUNT(DISTINCT contact_number)                                      AS unique_dials,
+            COUNT(DISTINCT CASE WHEN disposition ILIKE '%DM : Meeting Booked%' THEN contact_number END) AS demos
+          FROM gist.justcall_burner_email_call_logs
+          WHERE COALESCE(campaign_name, '') NOT ILIKE '%meta%'
+            AND COALESCE(agent_name, '') NOT ILIKE '%allaine%'
+            AND ((call_date::text || ' ' || call_time::text)::timestamp - interval '4 hours')::date BETWEEN $1::date AND $2::date
+          GROUP BY 1
+        )
         SELECT
-          ((call_date::text || ' ' || call_time::text)::timestamp - interval '4 hours')::date AS date,
-          COUNT(*)                                                            AS total_calls,
-          SUM(CASE WHEN campaign_id IS NOT NULL THEN 1 ELSE 0 END)           AS sales_dialer_calls,
-          SUM(CASE WHEN campaign_id IS NULL     THEN 1 ELSE 0 END)           AS justcall_calls,
-          COUNT(DISTINCT contact_number)                                      AS unique_dials,
-          SUM(CASE WHEN disposition ILIKE '%DM : Meeting Booked%' THEN 1 ELSE 0 END) AS demos
-        FROM gist.justcall_burner_email_call_logs
-        WHERE COALESCE(campaign_name, '') NOT ILIKE '%meta%'
-          AND COALESCE(agent_name, '') NOT ILIKE '%allaine%'
-          AND ((call_date::text || ' ' || call_time::text)::timestamp - interval '4 hours')::date >= DATE_TRUNC('month', CURRENT_DATE)::date
-        GROUP BY 1
-      )
-      SELECT
-        date,
-        total_calls,
-        SUM(total_calls) OVER (
-          PARTITION BY DATE_TRUNC('month', date)
-          ORDER BY date
-          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        ) AS calls_mtd,
-        92400 AS target,
-        ROUND(
+          date,
+          total_calls,
           SUM(total_calls) OVER (
             PARTITION BY DATE_TRUNC('month', date)
             ORDER BY date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-          )::numeric / 92400 * 100, 2
-        ) AS attainment,
-        sales_dialer_calls,
-        justcall_calls,
-        unique_dials,
-        demos
-      FROM daily_logs
-      WHERE date < CURRENT_DATE
-        AND EXTRACT(DOW FROM date) NOT IN (0, 6)
-      ORDER BY date DESC
-    `);
-
-    // Showups from sybill_meetings
-    const showupsResult = await client.query(`
-      WITH meetings_clean AS (
+          ) AS calls_mtd,
+          $3::int AS target,
+          ROUND(
+            SUM(total_calls) OVER (
+              PARTITION BY DATE_TRUNC('month', date)
+              ORDER BY date
+              ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            )::numeric / $3::int * 100, 2
+          ) AS attainment,
+          sales_dialer_calls,
+          justcall_calls,
+          unique_dials,
+          demos
+        FROM daily_logs
+        WHERE EXTRACT(DOW FROM date) NOT IN (0, 6)
+        ORDER BY date DESC
+        `,
+        [from, to, MONTH_CALL_TARGET]
+      ),
+      pool.query(
+        `
+        WITH meetings_clean AS (
+          SELECT to_timestamp(start_time / 1000) AS meeting_ts
+          FROM gist.sybill_meetings
+          WHERE start_time IS NOT NULL
+            AND LOWER(title) LIKE '%digital strategy%'
+        )
+        SELECT DATE(meeting_ts) AS date, COUNT(*) AS showups
+        FROM meetings_clean
+        WHERE DATE(meeting_ts) BETWEEN $1::date AND $2::date
+        GROUP BY 1
+        ORDER BY 1
+        `,
+        [from, to]
+      ),
+      pool.query(
+        `
         SELECT
-          to_timestamp(start_time / 1000) AS meeting_ts
-        FROM gist.sybill_meetings
-        WHERE start_time IS NOT NULL
-          AND LOWER(title) LIKE '%digital strategy%'
-      )
-      SELECT
-        DATE(meeting_ts) AS date,
-        COUNT(*) AS showups
-      FROM meetings_clean
-      WHERE DATE(meeting_ts) >= DATE_TRUNC('month', CURRENT_DATE)::date
-        AND DATE(meeting_ts) < CURRENT_DATE
-      GROUP BY 1
-      ORDER BY 1
-    `);
+          demo_scheduled_date::date AS date,
+          COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos_scheduled
+        FROM gist.gtm_demo_bookings
+        WHERE demo_scheduled_date IS NOT NULL
+          AND demo_scheduled_date::date >= GREATEST($1::date, '2026-04-14'::date)
+          AND demo_scheduled_date::date <= $2::date
+        GROUP BY 1
+        ORDER BY 1
+        `,
+        [from, to]
+      ),
+    ]);
 
     const showupsMap: Record<string, number> = {};
-    for (const r of showupsResult.rows) {
-      showupsMap[String(r.date)] = Number(r.showups);
-    }
+    for (const r of showupsRes.rows) showupsMap[String(r.date)] = Number(r.showups);
 
     // Demos scheduled: hardcoded until Apr 13, DB from Apr 14
     const demosScheduledMap: Record<string, number> = {
-      "2026-04-01": 28,
-      "2026-04-02": 19,
-      "2026-04-03": 13,
-      "2026-04-06": 24,
-      "2026-04-07": 27,
-      "2026-04-08": 25,
-      "2026-04-09": 21,
-      "2026-04-10": 28,
-      "2026-04-13": 21,
+      "2026-04-01": 28, "2026-04-02": 19, "2026-04-03": 13,
+      "2026-04-06": 24, "2026-04-07": 27, "2026-04-08": 25,
+      "2026-04-09": 21, "2026-04-10": 28, "2026-04-13": 21,
     };
-
-    const demosScheduledResult = await client.query(`
-      SELECT
-        demo_scheduled_date::date AS date,
-        COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos_scheduled
-      FROM (
-        SELECT account_name, demo_scheduled_date,
-          ROW_NUMBER() OVER (PARTITION BY LOWER(TRIM(account_name)) ORDER BY demo_scheduled_date DESC) AS rn
-        FROM gist.gtm_demo_bookings
-        WHERE demo_scheduled_date IS NOT NULL
-          AND demo_scheduled_date::date >= '2026-04-14'
-          AND demo_scheduled_date::date < CURRENT_DATE
-      ) t WHERE rn = 1
-      GROUP BY 1
-      ORDER BY 1
-    `);
-    for (const r of demosScheduledResult.rows) {
-      demosScheduledMap[String(r.date)] = Number(r.demos_scheduled);
-    }
+    for (const r of demosRes.rows) demosScheduledMap[String(r.date)] = Number(r.demos_scheduled);
 
     // Sort ascending to calculate running totals
-    const sortedForMtd = [...result.rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const sortedForMtd = [...callsRes.rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
     let showupsMtd = 0;
     let uniqueContactsMtd = 0;
     let demosScheduledMtd = 0;
@@ -174,7 +172,7 @@ export async function GET() {
       dayIndex++;
     }
 
-    const rows = result.rows.map((r) => {
+    const rows = callsRes.rows.map((r) => {
       const dateStr = String(r.date);
       const c = computedMap[dateStr] ?? {
         showups: 0, showups_mtd: 0, showup_target: 0,
@@ -202,8 +200,8 @@ export async function GET() {
         demos: demos,
         demos_scheduled: demosScheduled,
         demos_scheduled_mtd: c.demos_scheduled_mtd,
-        demo_plan: 463,
-        demo_attainment: Number(((c.demos_scheduled_mtd / 463) * 100).toFixed(2)),
+        demo_plan: MONTH_DEMO_PLAN,
+        demo_attainment: Number(((c.demos_scheduled_mtd / MONTH_DEMO_PLAN) * 100).toFixed(2)),
         demo_to_call_rate: totalCalls > 0
           ? Number(((demos / totalCalls) * 100).toFixed(2)) : 0,
         showup_rate: demosScheduled > 0
@@ -223,7 +221,5 @@ export async function GET() {
     console.error(err);
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
-  } finally {
-    client.release();
   }
 }
