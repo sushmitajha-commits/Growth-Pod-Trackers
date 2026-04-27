@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
           user_email,
           start_time,
           duration_seconds,
+          -- Friday week start
           DATE_TRUNC('week', start_time + INTERVAL '3 days') - INTERVAL '3 days' AS week_start,
           DATE_TRUNC('month', start_time) AS month_start
         FROM gist.clockify_time_entries
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
       hours AS (
         SELECT
           user_email,
+          -- Payroll period logic
           CASE
             WHEN week_start < month_start THEN month_start
             ELSE week_start
@@ -37,34 +39,33 @@ export async function GET(req: NextRequest) {
       sdrs AS (
         SELECT
           LOWER(TRIM("Official_Email")) AS email,
-          "Name",
+          COALESCE(NULLIF("Real_Name", ''), "Name") AS real_name,
           "Current_Status",
           CAST(REGEXP_REPLACE("Pay_Scale__hr_", '[^0-9.]', '', 'g') AS NUMERIC) AS hourly_rate
         FROM airbyte_ingestion.sdr_info_sdr
       )
       SELECT
         h.user_email,
-        s."Name" AS name,
+        s.real_name AS name,
         h.payroll_start::date AS week_start,
         h.hours_logged,
         CASE
-          WHEN s."Name" ILIKE '%Michelle%' THEN LEAST(h.hours_logged, 45)
+          WHEN s.real_name ILIKE '%Michelle%' THEN LEAST(h.hours_logged, 45)
           ELSE LEAST(h.hours_logged, 40)
         END AS capped_hours,
         s.hourly_rate,
         ROUND(
           CASE
-            WHEN s."Name" ILIKE '%Michelle%' THEN LEAST(h.hours_logged, 45)
+            WHEN s.real_name ILIKE '%Michelle%' THEN LEAST(h.hours_logged, 45)
             ELSE LEAST(h.hours_logged, 40)
           END * s.hourly_rate,
           2
         ) AS weekly_payout
       FROM hours h
       JOIN sdrs s ON LOWER(TRIM(h.user_email)) = s.email
-      WHERE s."Current_Status" = 'Active'
-        AND h.payroll_start::date >= $1::date
+      WHERE h.payroll_start::date >= $1::date
         AND h.payroll_start::date <= $2::date
-      ORDER BY h.payroll_start DESC, weekly_payout DESC;
+      ORDER BY h.payroll_start DESC, s.real_name ASC;
       `,
       [from, to]
     );
