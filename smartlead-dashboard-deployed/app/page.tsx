@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import DateRangePicker from "./components/DateRangePicker";
 
 /* ─── Types ─── */
@@ -52,6 +52,16 @@ type CallRow = {
   showup_attainment: number;
   working_days_gone: number;
   pct_working_days: number;
+};
+
+type OutboundCostRow = {
+  user_email: string;
+  name: string;
+  week_start: string;
+  hours_logged: number;
+  capped_hours: number;
+  hourly_rate: number;
+  weekly_payout: number;
 };
 
 /* ─── Helpers ─── */
@@ -142,13 +152,87 @@ const AE_COLS: { key: string; short: string; full: string; isCurrency?: boolean;
   { key: "working_days_gone",       short: "Days Gone",         full: "Working Days Gone (of 22)" },
 ];
 
+/* ─── Aggregate helpers ─── */
+
+function latestRow<T extends { date: string }>(rows: T[]): T {
+  return [...rows].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+}
+
+function computeEmailTotals(rows: EmailRow[]): EmailRow {
+  const sum = (k: keyof EmailRow) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+  const es = sum("emails_sent");
+  const ts = sum("target_emails_sent");
+  const cb = sum("calls_burner");
+  const db = sum("demos_burner");
+  const cnb = sum("calls_non_burner");
+  const dnb = sum("demos_non_burner");
+  const e2 = sum("emails_2plus_opens");
+  const dcrB = cb > 0 ? (db / cb) * 100 : 0;
+  const dcrNB = cnb > 0 ? (dnb / cnb) * 100 : 0;
+  const bounceWeighted = es > 0 ? rows.reduce((s, r) => s + (Number(r.bounce_rate) || 0) * (Number(r.emails_sent) || 0), 0) / es : 0;
+  return {
+    date: "Total",
+    emails_sent: es,
+    target_emails_sent: ts,
+    attainment: ts > 0 ? Number(((es / ts) * 100).toFixed(2)) : null,
+    bounce_rate: Number(bounceWeighted.toFixed(2)),
+    emails_2plus_opens: e2,
+    open_2plus_rate: es > 0 ? Number(((e2 / es) * 100).toFixed(2)) : 0,
+    unique_2plus_no_call: sum("unique_2plus_no_call"),
+    calls_burner: cb,
+    demos_burner: db,
+    demo_call_rate_burner: Number(dcrB.toFixed(2)),
+    calls_non_burner: cnb,
+    demos_non_burner: dnb,
+    demo_call_rate_non_burner: Number(dcrNB.toFixed(2)),
+    lift_from_burner: Number((dcrB - dcrNB).toFixed(2)),
+    if_no_burner: sum("if_no_burner"),
+    difference: sum("difference"),
+  };
+}
+
+function computeCallTotals(rows: CallRow[]): CallRow {
+  const sum = (k: keyof CallRow) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+  const last = latestRow(rows);
+  const tc = sum("total_calls");
+  const d = sum("demos");
+  const sh = sum("showups");
+  return {
+    ...last,
+    date: "Total",
+    total_calls: tc,
+    sales_dialer_calls: sum("sales_dialer_calls"),
+    justcall_calls: sum("justcall_calls"),
+    unique_dials: sum("unique_dials"),
+    new_contacts: sum("new_contacts"),
+    demos: d,
+    demos_scheduled: sum("demos_scheduled"),
+    demo_to_call_rate: tc > 0 ? Number(((d / tc) * 100).toFixed(2)) : 0,
+    showup_rate: d > 0 ? Number(((sh / d) * 100).toFixed(2)) : 0,
+    showups: sh,
+  };
+}
+
+function computeAeTotals(rows: Record<string, unknown>[]): Record<string, unknown> {
+  const sum = (k: string) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+  const last = [...rows].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  return {
+    ...last,
+    date: "Total",
+    showups: sum("showups"),
+    demos: sum("demos"),
+    closes: sum("closes"),
+    arr: sum("arr"),
+  };
+}
+
 /* ─── Component ─── */
 
 export default function Dashboard() {
   const today = new Date().toISOString().split("T")[0];
   const monthStart = currentMonthStart();
 
-  const [tab, setTab] = useState<"email" | "calls" | "ae">("email");
+  const [tab, setTab] = useState<"email" | "calls" | "ae" | "cost">("email");
 
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
@@ -166,6 +250,10 @@ export default function Dashboard() {
   const [aeRows, setAeRows] = useState<any[]>([]);
   const [aeLoading, setAeLoading] = useState(false);
   const [aeError, setAeError] = useState<string | null>(null);
+
+  const [costRows, setCostRows] = useState<OutboundCostRow[]>([]);
+  const [costLoading, setCostLoading] = useState(false);
+  const [costError, setCostError] = useState<string | null>(null);
 
   // Bumping this re-runs every fetcher's effect, which aborts any in-flight request.
   const [refreshKey, setRefreshKey] = useState(0);
@@ -259,6 +347,37 @@ export default function Dashboard() {
     return () => controller.abort();
   }, [fetchAe]);
 
+  const fetchCost = useCallback(async (signal: AbortSignal) => {
+    setCostLoading(true);
+    setCostError(null);
+    try {
+      const res = await fetch(`/api/outbound-cost?from=${from}&to=${to}`, { signal });
+      const json = await res.json();
+      if (signal.aborted) return;
+      if (json.error) throw new Error(json.error);
+      setCostRows((json.rows as Record<string, unknown>[]).map(r => ({
+        user_email: String(r.user_email ?? ""),
+        name: String(r.name ?? ""),
+        week_start: String(r.week_start ?? ""),
+        hours_logged: Number(r.hours_logged ?? 0),
+        capped_hours: Number(r.capped_hours ?? 0),
+        hourly_rate: Number(r.hourly_rate ?? 0),
+        weekly_payout: Number(r.weekly_payout ?? 0),
+      })));
+    } catch (e: unknown) {
+      if ((e instanceof Error && e.name === "AbortError") || signal.aborted) return;
+      setCostError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      if (!signal.aborted) setCostLoading(false);
+    }
+  }, [from, to, refreshKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchCost(controller.signal);
+    return () => controller.abort();
+  }, [fetchCost]);
+
   /* ─── Summary stats ─── */
   const emailSummary = emailRows.length > 0 ? {
     totalSent: emailRows.reduce((s, r) => s + r.emails_sent, 0),
@@ -311,13 +430,16 @@ export default function Dashboard() {
   const thCls = "px-4 py-3 text-left font-semibold whitespace-nowrap text-white text-[11px] bg-gushwork-500 border-b border-gushwork-600 first:pl-6";
   const tdCls = "px-4 py-3 whitespace-nowrap text-[12px] tabular-nums border-b border-gray-100 first:pl-6";
   const trCls = "hover:bg-gray-50 transition-colors";
+  const tdTotalCls = "px-4 py-3 whitespace-nowrap text-[12px] tabular-nums font-semibold bg-gushwork-50 border-b-2 border-gushwork-200 first:pl-6";
 
   return (
     <div className="min-h-screen bg-white">
       {/* Top bar */}
       <div className="border-b border-gray-200 sticky top-0 z-10 bg-white">
         <div className="max-w-[1900px] mx-auto px-8 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <img src="/gushwork-logo.png" alt="Gushwork" className="h-5 w-auto" />
+            <span className="h-5 w-px bg-gray-200" aria-hidden />
             <span className="text-lg text-gushwork-600 font-semibold tracking-tight">GTM Dashboard</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -348,6 +470,12 @@ export default function Dashboard() {
                 tab === "ae" ? "bg-gushwork-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
               }`}>
               Daily AE Tracker
+            </button>
+            <button onClick={() => setTab("cost")}
+              className={`px-5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
+                tab === "cost" ? "bg-gushwork-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}>
+              SDR Cost Tracker
             </button>
           </div>
           <div className="flex items-center gap-2.5">
@@ -395,6 +523,16 @@ export default function Dashboard() {
                   {emailRows.length === 0 && !emailLoading && (
                     <tr><td colSpan={EMAIL_COLS.length} className="text-center text-gray-400 py-20 text-[12px]">No data for selected range.</td></tr>
                   )}
+                  {emailRows.length > 0 && (() => {
+                    const totals = computeEmailTotals(emailRows);
+                    return (
+                      <tr>
+                        {EMAIL_COLS.map(col => (
+                          <td key={col.key} className={tdTotalCls}>{renderEmailCell(totals, col)}</td>
+                        ))}
+                      </tr>
+                    );
+                  })()}
                   {emailRows.map((row) => (
                     <tr key={row.date} className={trCls}>
                       {EMAIL_COLS.map(col => (
@@ -445,6 +583,29 @@ export default function Dashboard() {
                   {aeRows.length === 0 && !aeLoading && (
                     <tr><td colSpan={AE_COLS.length} className="text-center text-gray-400 py-20 text-[12px]">No data.</td></tr>
                   )}
+                  {aeRows.length > 0 && (() => {
+                    const t = computeAeTotals(aeRows);
+                    return (
+                      <tr>
+                        {AE_COLS.map(col => {
+                          const raw = t[col.key];
+                          let content: React.ReactNode;
+                          if (col.key === "date") {
+                            content = <span className="font-mono text-[12px] text-gushwork-700">Total</span>;
+                          } else if (col.isPct) {
+                            content = renderAttainment(Number(raw));
+                          } else if (col.isCurrency) {
+                            content = <span className="text-gray-800">${Number(raw ?? 0).toLocaleString()}</span>;
+                          } else if (col.key === "working_days_gone") {
+                            content = <span className="text-gray-600">{Number(t.working_days_gone ?? 0)} / 22</span>;
+                          } else {
+                            content = <span className="text-gray-800">{fmt(Number(raw))}</span>;
+                          }
+                          return <td key={col.key} className={tdTotalCls}>{content}</td>;
+                        })}
+                      </tr>
+                    );
+                  })()}
                   {aeRows.map((r) => (
                     <tr key={r.date} className={trCls}>
                       {AE_COLS.map(col => {
@@ -507,6 +668,16 @@ export default function Dashboard() {
                   {callRows.length === 0 && !callLoading && (
                     <tr><td colSpan={CALL_COLS.length} className="text-center text-gray-400 py-20 text-[12px]">No data.</td></tr>
                   )}
+                  {callRows.length > 0 && (() => {
+                    const totals = computeCallTotals(callRows);
+                    return (
+                      <tr>
+                        {CALL_COLS.map(col => (
+                          <td key={col.key} className={tdTotalCls}>{renderCallCell(totals, col)}</td>
+                        ))}
+                      </tr>
+                    );
+                  })()}
                   {callRows.map((row) => (
                     <tr key={row.date} className={trCls}>
                       {CALL_COLS.map(col => (
@@ -519,7 +690,185 @@ export default function Dashboard() {
             </div>
           </>
         )}
+
+        {/* ─── SDR Cost Tracker Tab ─── */}
+        {tab === "cost" && (
+          <SdrCostTracker
+            costRows={costRows}
+            costLoading={costLoading}
+            costError={costError}
+            thCls={thCls}
+            tdCls={tdCls}
+            tdTotalCls={tdTotalCls}
+            trCls={trCls}
+            StatCard={StatCard}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+/* ─── SDR Cost Tracker (weekly + collapsible) ─── */
+
+type SdrCostTrackerProps = {
+  costRows: OutboundCostRow[];
+  costLoading: boolean;
+  costError: string | null;
+  thCls: string;
+  tdCls: string;
+  tdTotalCls: string;
+  trCls: string;
+  StatCard: (props: { label: string; value: string; sub?: string }) => React.ReactElement;
+};
+
+function SdrCostTracker({ costRows, costLoading, costError, thCls, tdCls, tdTotalCls, trCls, StatCard }: SdrCostTrackerProps) {
+  const weekGroups = useMemo(() => {
+    const map: Record<string, OutboundCostRow[]> = {};
+    for (const r of costRows) {
+      if (!map[r.week_start]) map[r.week_start] = [];
+      map[r.week_start].push(r);
+    }
+    return Object.entries(map)
+      .map(([week, rows]) => {
+        const sortedRows = [...rows].sort((a, b) => b.weekly_payout - a.weekly_payout);
+        const hours_logged = rows.reduce((s, r) => s + r.hours_logged, 0);
+        const capped_hours = rows.reduce((s, r) => s + r.capped_hours, 0);
+        const weekly_payout = rows.reduce((s, r) => s + r.weekly_payout, 0);
+        return {
+          week_start: week,
+          sdrs: sortedRows,
+          sdr_count: rows.length,
+          hours_logged: Number(hours_logged.toFixed(2)),
+          capped_hours: Number(capped_hours.toFixed(2)),
+          weekly_payout: Number(weekly_payout.toFixed(2)),
+          avg_rate: capped_hours > 0 ? Number((weekly_payout / capped_hours).toFixed(2)) : 0,
+        };
+      })
+      .sort((a, b) => b.week_start.localeCompare(a.week_start));
+  }, [costRows]);
+
+  const totals = useMemo(() => {
+    const hours_logged = weekGroups.reduce((s, w) => s + w.hours_logged, 0);
+    const capped_hours = weekGroups.reduce((s, w) => s + w.capped_hours, 0);
+    const weekly_payout = weekGroups.reduce((s, w) => s + w.weekly_payout, 0);
+    return {
+      hours_logged: Number(hours_logged.toFixed(2)),
+      capped_hours: Number(capped_hours.toFixed(2)),
+      weekly_payout: Number(weekly_payout.toFixed(2)),
+      avg_rate: capped_hours > 0 ? Number((weekly_payout / capped_hours).toFixed(2)) : 0,
+      week_count: weekGroups.length,
+      sdr_weeks: costRows.length,
+    };
+  }, [weekGroups, costRows.length]);
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const toggle = (week: string) => setExpanded(prev => ({ ...prev, [week]: !prev[week] }));
+
+  const fmtMoney = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtHrs = (n: number) => n.toFixed(2);
+
+  return (
+    <>
+      {weekGroups.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <StatCard label="Weeks in Range" value={totals.week_count.toLocaleString()} sub={`${totals.sdr_weeks} SDR-weeks`} />
+          <StatCard label="Total Hours Logged" value={fmtHrs(totals.hours_logged)} sub="all SDRs" />
+          <StatCard label="Capped Hours" value={fmtHrs(totals.capped_hours)} sub="payable hours" />
+          <StatCard label="Total Cost Paid" value={fmtMoney(totals.weekly_payout)} sub={`avg $${totals.avg_rate.toFixed(2)}/hr`} />
+        </div>
+      )}
+
+      {costLoading && (
+        <div className="flex items-center gap-1.5 mb-4">
+          <div className="w-3 h-3 border-[1.5px] border-gray-200 border-t-gushwork-500 rounded-full animate-spin" />
+          <span className="text-[11px] text-gray-500">Loading...</span>
+        </div>
+      )}
+
+      {costError && (
+        <div className="bg-rose-50 text-rose-600 rounded-lg p-3 mb-5 text-[11px] border border-rose-200">{costError}</div>
+      )}
+
+      <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+        <table className="text-[12px] w-full">
+          <thead>
+            <tr>
+              <th className={thCls} style={{ width: 32 }}></th>
+              <th className={thCls} title="Payroll Week Start (Fri)">Week Start</th>
+              <th className={thCls} title="Number of SDRs paid this week"># SDRs</th>
+              <th className={thCls} title="Total hours logged in Clockify">Total Hours Logged</th>
+              <th className={thCls} title="Capped hours (40, or 45 for Michelle)">Capped Hours</th>
+              <th className={thCls} title="Total cost paid this week">Total Cost Paid</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weekGroups.length === 0 && !costLoading && (
+              <tr><td colSpan={6} className="text-center text-gray-400 py-20 text-[12px]">No data for selected range.</td></tr>
+            )}
+            {weekGroups.length > 0 && (
+              <tr>
+                <td className={tdTotalCls}></td>
+                <td className={tdTotalCls}><span className="font-mono text-[12px] text-gushwork-700">Total</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{totals.sdr_weeks}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{fmtHrs(totals.hours_logged)}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{fmtHrs(totals.capped_hours)}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{fmtMoney(totals.weekly_payout)}</span></td>
+              </tr>
+            )}
+            {weekGroups.map(week => {
+              const isOpen = !!expanded[week.week_start];
+              return (
+                <React.Fragment key={week.week_start}>
+                  <tr
+                    className={`${trCls} cursor-pointer`}
+                    onClick={() => toggle(week.week_start)}
+                  >
+                    <td className={tdCls}>
+                      <span className="inline-block w-4 text-gushwork-600 select-none">{isOpen ? "▾" : "▸"}</span>
+                    </td>
+                    <td className={tdCls}><span className="font-mono text-[12px] text-gray-700">{week.week_start}</span></td>
+                    <td className={tdCls}><span className="text-gray-800">{week.sdr_count}</span></td>
+                    <td className={tdCls}><span className="text-gray-800">{fmtHrs(week.hours_logged)}</span></td>
+                    <td className={tdCls}><span className="text-gray-800">{fmtHrs(week.capped_hours)}</span></td>
+                    <td className={tdCls}><span className="text-gray-800">{fmtMoney(week.weekly_payout)}</span></td>
+                  </tr>
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={6} className="bg-gray-50 border-b border-gray-100 px-6 py-3">
+                        <table className="text-[12px] w-full">
+                          <thead>
+                            <tr>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600 text-[11px]">SDR</th>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600 text-[11px]">Email</th>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600 text-[11px]">Hours Logged</th>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600 text-[11px]">Capped Hrs</th>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600 text-[11px]">$/Hr</th>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600 text-[11px]">Weekly Payout</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {week.sdrs.map((s, i) => (
+                              <tr key={`${week.week_start}-${s.user_email}-${i}`} className="hover:bg-white transition-colors">
+                                <td className="px-3 py-2 text-gray-800 tabular-nums">{s.name}</td>
+                                <td className="px-3 py-2 text-gray-500 text-[11px] tabular-nums">{s.user_email}</td>
+                                <td className="px-3 py-2 text-gray-800 tabular-nums">{fmtHrs(s.hours_logged)}</td>
+                                <td className="px-3 py-2 text-gray-800 tabular-nums">{fmtHrs(s.capped_hours)}</td>
+                                <td className="px-3 py-2 text-gray-800 tabular-nums">${s.hourly_rate.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-gray-800 tabular-nums">{fmtMoney(s.weekly_payout)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
