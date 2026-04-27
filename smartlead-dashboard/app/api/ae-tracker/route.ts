@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
           COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos
         FROM gist.gtm_demo_bookings
         WHERE demo_scheduled_date IS NOT NULL
-          AND demo_scheduled_date::date >= GREATEST($1::date, '2026-04-14'::date)
+          AND demo_scheduled_date::date >= GREATEST($1::date, '2026-05-01'::date)
           AND demo_scheduled_date::date <= $2::date
         GROUP BY 1
         ORDER BY 1
@@ -61,35 +61,43 @@ export async function GET(req: NextRequest) {
     const showupsMap: Record<string, number> = {};
     for (const r of showupsRes.rows) showupsMap[String(r.date)] = Number(r.showups);
 
-    // Demos scheduled hardcoded for Apr 1-13 (DB starts Apr 14)
+    // Demos scheduled: April 2026 hardcoded from SavvyCal CSV (ET, deduped by account+date). DB from May 1.
     const demosScheduledHardcoded: Record<string, number> = {
       "2026-04-01": 28, "2026-04-02": 19, "2026-04-03": 13,
-      "2026-04-06": 24, "2026-04-07": 27, "2026-04-08": 25,
-      "2026-04-09": 21, "2026-04-10": 28, "2026-04-13": 21,
+      "2026-04-06": 25, "2026-04-07": 20, "2026-04-08": 19,
+      "2026-04-09": 20, "2026-04-10": 26, "2026-04-13": 18,
+      "2026-04-14": 25, "2026-04-15": 30, "2026-04-16": 27,
+      "2026-04-17": 35, "2026-04-20": 26, "2026-04-21": 31,
+      "2026-04-22": 28, "2026-04-23": 27, "2026-04-24": 36,
+      "2026-04-27": 13, "2026-04-28": 15, "2026-04-29": 2,
+      "2026-04-30": 4,
     };
     const demosMap: Record<string, number> = { ...demosScheduledHardcoded };
     for (const r of demosRes.rows) demosMap[String(r.date)] = Number(r.demos);
 
-    // Outbound closes — hardcoded
+    // Outbound closes — hardcoded (manually confirmed April 2026, MRR in USD)
     const allCloses = [
-      { date: "2026-04-03", price: 800 },
-      { date: "2026-04-01", price: 800 },
-      { date: "2026-04-06", price: 800 },
-      { date: "2026-04-08", price: 1540 },
-      { date: "2026-04-08", price: 600 },
-      { date: "2026-04-09", price: 1500 },
-      { date: "2026-04-15", price: 550 },
-      { date: "2026-04-16", price: 800 },
-      { date: "2026-04-14", price: 800 },
-      { date: "2026-04-14", price: 800 },
-      { date: "2026-04-20", price: 500 },
-      { date: "2026-04-20", price: 1000 },
-      { date: "2026-04-22", price: 600 },
-      { date: "2026-04-16", price: 400 },
-      { date: "2026-04-20", price: 520 },
-      { date: "2026-04-20", price: 800 },
-      { date: "2026-04-20", price: 800 },
-      { date: "2026-04-20", price: 1200 },
+      { date: "2026-04-01", price: 800,  account: "M2 Antenna Systems",                 ae: "Arabind" },
+      { date: "2026-04-01", price: 800,  account: "Engineered Roofing Systems",         ae: "Mani"    },
+      { date: "2026-04-06", price: 800,  account: "CNC Programming Solutions",          ae: "Abhinav" },
+      { date: "2026-04-08", price: 1540, account: "DEI Power",                          ae: "Abhinav" },
+      { date: "2026-04-08", price: 600,  account: "MTS Forge",                          ae: "Mani"    },
+      { date: "2026-04-09", price: 1500, account: "Specgas",                            ae: "Ajith"   },
+      { date: "2026-04-13", price: 550,  account: "https://www.marseng.com/",           ae: "Abhinav" },
+      { date: "2026-04-14", price: 800,  account: "https://www.thewindscreenfactory.net/", ae: "Abhinav" },
+      { date: "2026-04-14", price: 800,  account: "https://mansfieldec.com/",           ae: "Abhinav" },
+      { date: "2026-04-14", price: 800,  account: "https://www.esg-intl.com/",          ae: "Arabind" },
+      { date: "2026-04-20", price: 500,  account: "https://www.artesian-systems.com/",  ae: "Abhinav" },
+      { date: "2026-04-20", price: 1000, account: "https://nidrapack.com",              ae: "Mani"    },
+      { date: "2026-04-21", price: 800,  account: "https://lumi-star.com/",             ae: "Nitin"   },
+      { date: "2026-04-22", price: 520,  account: "https://www.krupa-services.com/",    ae: "Abhinav" },
+      { date: "2026-04-22", price: 800,  account: "https://tqfab.com/",                 ae: "Mani"    },
+      { date: "2026-04-23", price: 400,  account: "https://a-sparkvn.com/",             ae: "Nitin"   },
+      { date: "2026-04-23", price: 400,  account: "www.marcusmanufacturing.com",        ae: "Nitin"   },
+      { date: "2026-04-27", price: 1200, account: "mike@continental-ind.net",           ae: "Abhinav" },
+      { date: "2026-04-27", price: 800,  account: "https://ipsinc.info/",               ae: "Ajith"   },
+      { date: "2026-04-28", price: 1020, account: "https://hixson-inc.com/",            ae: "Mani"    },
+      { date: "2026-04-30", price: 650,  account: "https://storageproductscompany.com/", ae: "Sukriti" },
     ];
 
     const closesMap: Record<string, { count: number; arr: number }> = {};

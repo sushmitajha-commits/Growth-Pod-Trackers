@@ -23,6 +23,11 @@ const NEW_CONTACTS_MAP: Record<string, number> = {
   "2026-04-16": 1724,
   "2026-04-17": 3081,
   "2026-04-18": 3393,
+  "2026-04-20": 3393,
+  "2026-04-21": 3841,
+  "2026-04-22": 1874,
+  "2026-04-23": 2128,
+  "2026-04-24": 1671,
 };
 
 const MONTHLY_MAX_CONTACTS = 79000;
@@ -109,7 +114,7 @@ export async function GET(req: NextRequest) {
           COUNT(DISTINCT LOWER(TRIM(account_name))) AS demos_scheduled
         FROM gist.gtm_demo_bookings
         WHERE demo_scheduled_date IS NOT NULL
-          AND demo_scheduled_date::date >= GREATEST($1::date, '2026-04-14'::date)
+          AND demo_scheduled_date::date >= GREATEST($1::date, '2026-05-01'::date)
           AND demo_scheduled_date::date <= $2::date
         GROUP BY 1
         ORDER BY 1
@@ -121,11 +126,16 @@ export async function GET(req: NextRequest) {
     const showupsMap: Record<string, number> = {};
     for (const r of showupsRes.rows) showupsMap[String(r.date)] = Number(r.showups);
 
-    // Demos scheduled: hardcoded until Apr 13, DB from Apr 14
+    // Demos scheduled: April 2026 hardcoded from SavvyCal CSV (ET, deduped by account+date). DB from May 1.
     const demosScheduledMap: Record<string, number> = {
       "2026-04-01": 28, "2026-04-02": 19, "2026-04-03": 13,
-      "2026-04-06": 24, "2026-04-07": 27, "2026-04-08": 25,
-      "2026-04-09": 21, "2026-04-10": 28, "2026-04-13": 21,
+      "2026-04-06": 25, "2026-04-07": 20, "2026-04-08": 19,
+      "2026-04-09": 20, "2026-04-10": 26, "2026-04-13": 18,
+      "2026-04-14": 25, "2026-04-15": 30, "2026-04-16": 27,
+      "2026-04-17": 35, "2026-04-20": 26, "2026-04-21": 31,
+      "2026-04-22": 28, "2026-04-23": 27, "2026-04-24": 36,
+      "2026-04-27": 13, "2026-04-28": 15, "2026-04-29": 2,
+      "2026-04-30": 4,
     };
     for (const r of demosRes.rows) demosScheduledMap[String(r.date)] = Number(r.demos_scheduled);
 
