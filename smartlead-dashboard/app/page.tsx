@@ -232,7 +232,7 @@ export default function Dashboard() {
   const today = new Date().toISOString().split("T")[0];
   const monthStart = currentMonthStart();
 
-  const [tab, setTab] = useState<"email" | "calls" | "ae" | "cost">("email");
+  const [tab, setTab] = useState<"email" | "calls" | "ae" | "cost" | "touchpoint">("email");
 
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
@@ -254,6 +254,12 @@ export default function Dashboard() {
   const [costRows, setCostRows] = useState<OutboundCostRow[]>([]);
   const [costLoading, setCostLoading] = useState(false);
   const [costError, setCostError] = useState<string | null>(null);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [touchpointData, setTouchpointData] = useState<any | null>(null);
+  const [touchpointLoading, setTouchpointLoading] = useState(false);
+  const [touchpointError, setTouchpointError] = useState<string | null>(null);
+  const [touchpointFetched, setTouchpointFetched] = useState(false);
 
   // Bumping this re-runs every fetcher's effect, which aborts any in-flight request.
   const [refreshKey, setRefreshKey] = useState(0);
@@ -378,6 +384,28 @@ export default function Dashboard() {
     return () => controller.abort();
   }, [fetchCost]);
 
+  // Eager-load touchpoint data on mount (API is sub-second since data is hardcoded)
+  useEffect(() => {
+    const controller = new AbortController();
+    setTouchpointLoading(true);
+    setTouchpointError(null);
+    fetch("/api/sequence-funnel", { signal: controller.signal })
+      .then(res => res.json())
+      .then(json => {
+        if (controller.signal.aborted) return;
+        if (json.error) throw new Error(json.error);
+        setTouchpointData(json);
+        setTouchpointFetched(true);
+      })
+      .catch(e => {
+        if ((e instanceof Error && e.name === "AbortError") || controller.signal.aborted) return;
+        setTouchpointError(e instanceof Error ? e.message : "Unknown error");
+      })
+      .finally(() => { if (!controller.signal.aborted) setTouchpointLoading(false); });
+    return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
+
   /* ─── Summary stats ─── */
   const emailSummary = emailRows.length > 0 ? {
     totalSent: emailRows.reduce((s, r) => s + r.emails_sent, 0),
@@ -476,6 +504,12 @@ export default function Dashboard() {
                 tab === "cost" ? "bg-gushwork-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
               }`}>
               SDR Cost Tracker
+            </button>
+            <button onClick={() => setTab("touchpoint")}
+              className={`px-5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
+                tab === "touchpoint" ? "bg-gushwork-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}>
+              Burner Contacts Touchpoint DB
             </button>
           </div>
           <div className="flex items-center gap-2.5">
@@ -704,8 +738,130 @@ export default function Dashboard() {
             StatCard={StatCard}
           />
         )}
+
+        {/* ─── Burner Contacts Touchpoint DB Tab ─── */}
+        {tab === "touchpoint" && (
+          <BurnerTouchpointDB
+            snapshots={touchpointData}
+            loading={touchpointLoading}
+            error={touchpointError}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+/* ─── Burner Contacts Touchpoint DB (Sequence Funnel) ─── */
+
+type SequenceFunnelData = {
+  tam: number;
+  rows: { week_start: string; tam: number; sq: number[] }[];
+};
+
+function BurnerTouchpointDB({ snapshots, loading, error }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  snapshots: any | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  const data = snapshots as SequenceFunnelData | null;
+  const rows = data?.rows ?? [];
+  const tam = data?.tam ?? 0;
+
+  const thC = "px-4 py-3 text-right font-semibold text-[11px] bg-gray-50 border-b border-gray-200 tabular-nums text-gray-700 whitespace-nowrap";
+  const thDate = "px-4 py-3 text-left font-semibold whitespace-nowrap text-[11px] bg-gray-50 border-b border-gray-200 text-gray-700";
+  const tdC = "px-4 py-3 whitespace-nowrap text-[12px] tabular-nums border-b border-gray-100 text-right";
+  const tdDate = "px-4 py-3 whitespace-nowrap text-[12px] border-b border-gray-100 text-left font-mono font-medium text-gray-700";
+
+  const n = (v: number) => v.toLocaleString();
+  const pct = (v: number, total: number) => total > 0 ? `${((v / total) * 100).toFixed(1)}%` : "—";
+
+  const SQ_LABELS = Array.from({ length: 12 }, (_, i) => `SQ${i + 1}`);
+  const SQ_SUBTITLES = [
+    "T1 Seq 1", "T1 Seq 2", "T1 Seq 3",
+    "T2 Seq 1", "T2 Seq 2", "T2 Seq 3", "T2 Seq 4", "T2 Seq 5", "T2 Seq 6",
+    "T3 Seq 1", "T3 Seq 2", "T3 Seq 3",
+  ];
+
+  return (
+    <>
+      {loading && (
+        <div className="flex items-center gap-1.5 mb-4 mx-6">
+          <div className="w-3 h-3 border-[1.5px] border-gray-200 border-t-gushwork-500 rounded-full animate-spin" />
+          <span className="text-[11px] text-gray-500">Loading...</span>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-rose-50 text-rose-600 rounded-lg p-3 mb-5 text-[11px] border border-rose-200 mx-6">{error}</div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 mx-6">
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="text-[11px] text-gushwork-600 font-medium mb-1">Total TAM</div>
+            <div className="text-xl font-bold text-gray-900 tabular-nums">{n(tam)}</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">unique leads in repo</div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="text-[11px] text-gushwork-600 font-medium mb-1">SQ1 Coverage</div>
+            <div className="text-xl font-bold text-gray-900 tabular-nums">{pct(rows[rows.length - 1].sq[0], tam)}</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">{n(rows[rows.length - 1].sq[0])} leads reached</div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="text-[11px] text-gushwork-600 font-medium mb-1">All 12 SQ Complete</div>
+            <div className="text-xl font-bold text-gray-900 tabular-nums">{pct(rows[rows.length - 1].sq[11], tam)}</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">{n(rows[rows.length - 1].sq[11])} leads</div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="text-[11px] text-gushwork-600 font-medium mb-1">Weeks Tracked</div>
+            <div className="text-xl font-bold text-gray-900 tabular-nums">{rows.length}</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">{rows[0].week_start} → {rows[rows.length - 1].week_start}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto overflow-y-auto max-h-[65vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+        <table className="text-[12px] w-full">
+          <thead className="sticky top-0 z-10">
+            <tr>
+              <th className={thDate}>Week Start</th>
+              <th className={thC}>TAM</th>
+              {SQ_LABELS.map((label, i) => (
+                <th key={label} className={`${thC}${i === 2 || i === 8 ? " border-r border-gray-200" : ""}`}>
+                  <div>{label}</div>
+                  <div className="text-[9px] font-normal text-gray-400">{SQ_SUBTITLES[i]}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && !loading && (
+              <tr><td colSpan={14} className="text-center text-gray-400 py-20 text-[12px]">No data yet.</td></tr>
+            )}
+            {rows.map((r, rowIdx) => (
+              <tr key={r.week_start} className={`hover:bg-gray-50 transition-colors${rowIdx === rows.length - 1 ? " bg-gushwork-50/40" : ""}`}>
+                <td className={tdDate}>
+                  {r.week_start}{rowIdx === rows.length - 1 ? " (latest)" : ""}
+                </td>
+                <td className={`${tdC} font-semibold text-gray-900`}>{n(r.tam)}</td>
+                {r.sq.map((val, i) => (
+                  <td
+                    key={`sq${i}`}
+                    className={`${tdC}${i === 2 || i === 8 ? " border-r border-gray-100" : ""}${i === 11 ? " font-semibold text-gray-900" : ""}`}
+                    title={`${pct(val, r.tam)} of TAM`}
+                  >
+                    <div>{n(val)}</div>
+                    <div className="text-[9px] text-gray-400">{pct(val, r.tam)}</div>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
