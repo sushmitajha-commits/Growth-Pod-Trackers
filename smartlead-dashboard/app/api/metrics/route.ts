@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { createCache } from "@/lib/cache";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const cache = createCache<any>(10 * 60 * 1000);
 
 const TARGETS: Record<string, number> = {
   "2025-03-30": 100000, "2025-03-31": 101000,
@@ -157,6 +161,10 @@ export async function GET(req: NextRequest) {
   `;
 
   try {
+    const cacheKey = `${from}|${to}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return NextResponse.json(cached);
+
     // Run all four queries in parallel — each acquires its own pooled client.
     const [statsResult, noCallResult, callsResult, uniqueOpensResult] = await Promise.all([
       pool.query(statsQuery, [from, to]),
@@ -229,7 +237,9 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ rows, totalUnique2Plus });
+    const result = { rows, totalUnique2Plus };
+    cache.set(cacheKey, result);
+    return NextResponse.json(result);
   } catch (err: unknown) {
     console.error(err);
     const message = err instanceof Error ? err.message : "Unknown error";

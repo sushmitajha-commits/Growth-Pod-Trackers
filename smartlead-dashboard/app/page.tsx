@@ -64,6 +64,21 @@ type OutboundCostRow = {
   weekly_payout: number;
 };
 
+type MasterDBRow = {
+  week_start: string;
+  unique_leads_emailed: number;
+  unique_called_burner: number;
+  unique_called_nonburner: number;
+  demos_burner: number;
+  demos_nonburner: number;
+  showups_burner: number;
+  showups_nonburner: number;
+  closes_burner: number;
+  closes_nonburner: number;
+  closes_burner_accounts: string[];
+  closes_nonburner_accounts: string[];
+};
+
 /* ─── Helpers ─── */
 
 function fmt(val: number | null | undefined, suffix = ""): string {
@@ -232,7 +247,7 @@ export default function Dashboard() {
   const today = new Date().toISOString().split("T")[0];
   const monthStart = currentMonthStart();
 
-  const [tab, setTab] = useState<"email" | "calls" | "ae" | "cost" | "touchpoint">("email");
+  const [tab, setTab] = useState<"email" | "calls" | "ae" | "cost" | "touchpoint" | "masterdb">("email");
 
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
@@ -260,6 +275,10 @@ export default function Dashboard() {
   const [touchpointLoading, setTouchpointLoading] = useState(false);
   const [touchpointError, setTouchpointError] = useState<string | null>(null);
   const [touchpointFetched, setTouchpointFetched] = useState(false);
+
+  const [masterdbRows, setMasterdbRows] = useState<MasterDBRow[]>([]);
+  const [masterdbLoading, setMasterdbLoading] = useState(false);
+  const [masterdbError, setMasterdbError] = useState<string | null>(null);
 
   // Bumping this re-runs every fetcher's effect, which aborts any in-flight request.
   const [refreshKey, setRefreshKey] = useState(0);
@@ -383,6 +402,29 @@ export default function Dashboard() {
     fetchCost(controller.signal);
     return () => controller.abort();
   }, [fetchCost]);
+
+  const fetchMasterDB = useCallback(async (signal: AbortSignal) => {
+    setMasterdbLoading(true);
+    setMasterdbError(null);
+    try {
+      const res = await fetch(`/api/master-db?from=${from}&to=${to}`, { signal });
+      const json = await res.json();
+      if (signal.aborted) return;
+      if (json.error) throw new Error(json.error);
+      setMasterdbRows(json.rows);
+    } catch (e: unknown) {
+      if ((e instanceof Error && e.name === "AbortError") || signal.aborted) return;
+      setMasterdbError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      if (!signal.aborted) setMasterdbLoading(false);
+    }
+  }, [from, to, refreshKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchMasterDB(controller.signal);
+    return () => controller.abort();
+  }, [fetchMasterDB]);
 
   // Eager-load touchpoint data on mount (API is sub-second since data is hardcoded)
   useEffect(() => {
@@ -511,6 +553,12 @@ export default function Dashboard() {
               }`}>
               Burner Contacts Touchpoint DB
             </button>
+            <button onClick={() => setTab("masterdb")}
+              className={`px-5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
+                tab === "masterdb" ? "bg-gushwork-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}>
+              Master DB
+            </button>
           </div>
           <div className="flex items-center gap-2.5">
             <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
@@ -585,8 +633,8 @@ export default function Dashboard() {
           <>
             {aeRows.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-                <StatCard label="Show-ups MTD" value={aeRows[0]?.showups_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.showup_attainment ?? 0}% of ${aeRows[0]?.showup_target ?? 185}`} />
-                <StatCard label="Demos MTD" value={aeRows[0]?.demos_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.demo_attainment ?? 0}% of ${aeRows[0]?.demo_target ?? 463}`} />
+                <StatCard label="Show-ups MTD" value={aeRows[0]?.showups_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.showup_attainment ?? 0}% of ${aeRows[0]?.showup_target ?? 296}`} />
+                <StatCard label="Demos MTD" value={aeRows[0]?.demos_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.demo_attainment ?? 0}% of ${aeRows[0]?.demo_target ?? 591}`} />
                 <StatCard label="Closes MTD" value={aeRows[0]?.closes_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.close_attainment ?? 0}% attainment`} />
                 <StatCard label="ARR Closed MTD" value={`$${(aeRows[0]?.arr_mtd ?? 0).toLocaleString()}`} sub={`${aeRows[0]?.arr_attainment ?? 0}% attainment`} />
                 <StatCard label="Working Days" value={`${aeRows[0]?.working_days_gone ?? 0} / 22`} sub={`${aeRows[0]?.pct_working_days ?? 0}% gone`} />
@@ -671,10 +719,10 @@ export default function Dashboard() {
           <>
             {callSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                <StatCard label="Calls MTD" value={callSummary.callsMtd.toLocaleString()} sub={`${callSummary.callsAttainment}% of 92.4K target`} />
-                <StatCard label="Demos Scheduled MTD" value={callSummary.demoScheduledMtd.toLocaleString()} sub={`${callSummary.demoAttainment}% of 463 target`} />
-                <StatCard label="Showups MTD" value={callSummary.showupsMtd.toLocaleString()} sub={`${callSummary.showupAttainment}% of 185 target`} />
-                <StatCard label="Showup Attainment" value={`${callSummary.showupAttainment}%`} sub="vs 185 plan" />
+                <StatCard label="Calls MTD" value={callSummary.callsMtd.toLocaleString()} sub={`${callSummary.callsAttainment}% of 100K target`} />
+                <StatCard label="Demos Scheduled MTD" value={callSummary.demoScheduledMtd.toLocaleString()} sub={`${callSummary.demoAttainment}% of 591 target`} />
+                <StatCard label="Showups MTD" value={callSummary.showupsMtd.toLocaleString()} sub={`${callSummary.showupAttainment}% of 296 target`} />
+                <StatCard label="Showup Attainment" value={`${callSummary.showupAttainment}%`} sub="vs 296 plan" />
               </div>
             )}
 
@@ -745,6 +793,20 @@ export default function Dashboard() {
             snapshots={touchpointData}
             loading={touchpointLoading}
             error={touchpointError}
+          />
+        )}
+
+        {/* ─── Master DB Tab ─── */}
+        {tab === "masterdb" && (
+          <MasterDB
+            rows={masterdbRows}
+            loading={masterdbLoading}
+            error={masterdbError}
+            thCls={thCls}
+            tdCls={tdCls}
+            tdTotalCls={tdTotalCls}
+            trCls={trCls}
+            StatCard={StatCard}
           />
         )}
       </div>
@@ -1022,6 +1084,201 @@ function SdrCostTracker({ costRows, costLoading, costError, thCls, tdCls, tdTota
                 </React.Fragment>
               );
             })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+/* ─── Master DB (weekly summary with burner/non-burner filter) ─── */
+
+type MasterDBProps = {
+  rows: MasterDBRow[];
+  loading: boolean;
+  error: string | null;
+  thCls: string;
+  tdCls: string;
+  tdTotalCls: string;
+  trCls: string;
+  StatCard: (props: { label: string; value: string; sub?: string }) => React.ReactElement;
+};
+
+type MasterDBFilter = "all" | "burner" | "nonburner";
+
+function MasterDB({ rows, loading, error, thCls, tdCls, tdTotalCls, trCls, StatCard }: MasterDBProps) {
+  const [filter, setFilter] = useState<MasterDBFilter>("all");
+
+  const computed = useMemo(() => {
+    return rows.map((r) => {
+      const emailed = r.unique_leads_emailed;
+      const calledBurner = r.unique_called_burner;
+      const calledNonburner = r.unique_called_nonburner;
+
+      let leads_contacted: number;
+      let email_only: number;
+      let call_email: number;
+      let call_only: number;
+      let demos: number;
+      let showups: number;
+      let closes: number;
+      let closes_accounts: string[];
+
+      if (filter === "burner") {
+        email_only = Math.max(emailed - calledBurner, 0);
+        call_email = calledBurner;
+        call_only = 0;
+        leads_contacted = emailed;
+        demos = r.demos_burner;
+        showups = r.showups_burner;
+        closes = r.closes_burner;
+        closes_accounts = r.closes_burner_accounts;
+      } else if (filter === "nonburner") {
+        email_only = 0;
+        call_email = 0;
+        call_only = calledNonburner;
+        leads_contacted = calledNonburner;
+        demos = r.demos_nonburner;
+        showups = r.showups_nonburner;
+        closes = r.closes_nonburner;
+        closes_accounts = r.closes_nonburner_accounts;
+      } else {
+        email_only = Math.max(emailed - calledBurner, 0);
+        call_email = calledBurner;
+        call_only = calledNonburner;
+        leads_contacted = emailed + calledNonburner;
+        demos = r.demos_burner + r.demos_nonburner;
+        showups = r.showups_burner + r.showups_nonburner;
+        closes = r.closes_burner + r.closes_nonburner;
+        closes_accounts = [...r.closes_burner_accounts, ...r.closes_nonburner_accounts];
+      }
+
+      return {
+        week_start: r.week_start,
+        leads_contacted,
+        email_only,
+        call_email,
+        call_only,
+        demos,
+        showups,
+        closes,
+        closes_accounts,
+      };
+    });
+  }, [rows, filter]);
+
+  const totals = useMemo(() => {
+    const sum = (k: keyof (typeof computed)[0]) => computed.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+    return {
+      leads_contacted: sum("leads_contacted"),
+      email_only: sum("email_only"),
+      call_email: sum("call_email"),
+      call_only: sum("call_only"),
+      demos: sum("demos"),
+      showups: sum("showups"),
+      closes: sum("closes"),
+    };
+  }, [computed]);
+
+  const COLS = [
+    { key: "week_start" as const, short: "Week Start", full: "Week Starting Monday" },
+    { key: "leads_contacted" as const, short: "Leads Contacted", full: "# of Unique Leads Contacted" },
+    { key: "email_only" as const, short: "Email Only", full: "Leads Contacted via Email Only" },
+    { key: "call_email" as const, short: "Call + Email", full: "Leads Contacted via Both Call and Email" },
+    { key: "call_only" as const, short: "Call Only", full: "Leads Contacted via Call Only" },
+    { key: "demos" as const, short: "Demos", full: "Demos Booked" },
+    { key: "showups" as const, short: "Showups", full: "Show-ups (Digital Strategy Meetings)" },
+    { key: "closes" as const, short: "Closes", full: "Outbound Closes" },
+  ];
+
+  const n = (v: number) => v.toLocaleString();
+
+  return (
+    <>
+      {/* Filter toggle */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">Filter:</span>
+        {(["all", "burner", "nonburner"] as MasterDBFilter[]).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all duration-200 ${
+              filter === f
+                ? "bg-gushwork-500 text-white shadow-sm"
+                : "bg-gray-100 text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {f === "all" ? "All" : f === "burner" ? "Burner" : "Non-Burner"}
+          </button>
+        ))}
+      </div>
+
+      {computed.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <StatCard label="Total Leads Contacted" value={n(totals.leads_contacted)} sub={`${computed.length} weeks`} />
+          <StatCard label="Total Demos" value={n(totals.demos)} sub="demos booked" />
+          <StatCard label="Total Showups" value={n(totals.showups)} sub="digital strategy meetings" />
+          <StatCard label="Total Closes" value={n(totals.closes)} sub="outbound closes" />
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex items-center gap-1.5 mb-4">
+          <div className="w-3 h-3 border-[1.5px] border-gray-200 border-t-gushwork-500 rounded-full animate-spin" />
+          <span className="text-[11px] text-gray-500">Loading...</span>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-rose-50 text-rose-600 rounded-lg p-3 mb-5 text-[11px] border border-rose-200">{error}</div>
+      )}
+
+      <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+        <table className="text-[12px] w-full">
+          <thead>
+            <tr>
+              {COLS.map(col => (
+                <th key={col.key} title={col.full} className={thCls}>{col.short}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {computed.length === 0 && !loading && (
+              <tr><td colSpan={COLS.length} className="text-center text-gray-400 py-20 text-[12px]">No data for selected range.</td></tr>
+            )}
+            {computed.length > 0 && (
+              <tr>
+                <td className={tdTotalCls}><span className="font-mono text-[12px] text-gushwork-700">Total</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{n(totals.leads_contacted)}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{n(totals.email_only)}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{n(totals.call_email)}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{n(totals.call_only)}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{n(totals.demos)}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{n(totals.showups)}</span></td>
+                <td className={tdTotalCls}><span className="text-gray-800">{n(totals.closes)}</span></td>
+              </tr>
+            )}
+            {computed.map((row) => (
+              <tr key={row.week_start} className={trCls}>
+                <td className={tdCls}><span className="font-mono text-[12px] text-gray-700">{row.week_start}</span></td>
+                <td className={tdCls}><span className="text-gray-800">{n(row.leads_contacted)}</span></td>
+                <td className={tdCls}><span className="text-gray-800">{n(row.email_only)}</span></td>
+                <td className={tdCls}><span className="text-gray-800">{n(row.call_email)}</span></td>
+                <td className={tdCls}><span className="text-gray-800">{n(row.call_only)}</span></td>
+                <td className={tdCls}><span className="text-gray-800">{n(row.demos)}</span></td>
+                <td className={tdCls}><span className="text-gray-800">{n(row.showups)}</span></td>
+                <td className={tdCls}>
+                  {row.closes > 0 ? (
+                    <span
+                      className="text-gray-800 underline decoration-dotted decoration-gray-300 cursor-help"
+                      title={row.closes_accounts.join("\n")}
+                    >{n(row.closes)}</span>
+                  ) : (
+                    <span className="text-gray-800">{n(row.closes)}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

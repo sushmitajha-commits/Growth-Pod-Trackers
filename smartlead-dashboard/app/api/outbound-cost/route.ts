@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { createCache } from "@/lib/cache";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const cache = createCache<any>(10 * 60 * 1000);
 
 function defaultFrom() {
   const d = new Date();
@@ -12,6 +16,10 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
 
   try {
+    const cacheKey = `${from}|${to}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return NextResponse.json(cached);
+
     const res = await pool.query(
       `
       WITH base AS (
@@ -70,7 +78,9 @@ export async function GET(req: NextRequest) {
       [from, to]
     );
 
-    return NextResponse.json({ rows: res.rows });
+    const result = { rows: res.rows };
+    cache.set(cacheKey, result);
+    return NextResponse.json(result);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
