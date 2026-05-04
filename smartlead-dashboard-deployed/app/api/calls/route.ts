@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { createCache } from "@/lib/cache";
 
-// Showup targets for the month (22 working days, target = 250)
-const SHOWUP_TARGETS = Array.from({ length: 22 }, (_, i) => Math.round((250 / 22) * (i + 1)));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const cache = createCache<any>(10 * 60 * 1000);
 
-// Demo plan targets for the month (22 working days, target = 550)
-const DEMO_PLAN_TARGETS = Array.from({ length: 22 }, (_, i) => Math.round((550 / 22) * (i + 1)));
+// Showup targets for the month (21 working days, target = 296)
+const SHOWUP_TARGETS = Array.from({ length: 21 }, (_, i) => Math.round((296 / 21) * (i + 1)));
+
+// Demo plan targets for the month (21 working days, target = 591)
+const DEMO_PLAN_TARGETS = Array.from({ length: 21 }, (_, i) => Math.round((591 / 21) * (i + 1)));
 
 // New contacts loaded: hardcoded Apr 1–18
 const NEW_CONTACTS_MAP: Record<string, number> = {
@@ -31,10 +35,10 @@ const NEW_CONTACTS_MAP: Record<string, number> = {
 };
 
 const MONTHLY_MAX_CONTACTS = 79000;
-const SHOWUP_PLAN = 250;
-const TOTAL_WORKING_DAYS = 22;
+const SHOWUP_PLAN = 296;
+const TOTAL_WORKING_DAYS = 21;
 const MONTH_CALL_TARGET = 100000;
-const MONTH_DEMO_PLAN = 550;
+const MONTH_DEMO_PLAN = 591;
 
 function defaultFrom() {
   const d = new Date();
@@ -47,6 +51,10 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
 
   try {
+    const cacheKey = `${from}|${to}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return NextResponse.json(cached);
+
     // Run the three queries in parallel — each acquires its own pooled client.
     const [callsRes, showupsRes, demosRes] = await Promise.all([
       pool.query(
@@ -226,7 +234,9 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ rows });
+    const result = { rows };
+    cache.set(cacheKey, result);
+    return NextResponse.json(result);
   } catch (err: unknown) {
     console.error(err);
     const message = err instanceof Error ? err.message : "Unknown error";

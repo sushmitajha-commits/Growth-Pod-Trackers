@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { createCache } from "@/lib/cache";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const cache = createCache<any>(10 * 60 * 1000);
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +12,7 @@ const MONTHLY_TARGETS: Record<string, {
   showups: number; demos: number; closes: number; arr: number; workingDays: number;
 }> = {
   "2026-04": { showups: 250, demos: 550, closes: 40, arr: 384000, workingDays: 22 },
-  "2026-05": { showups: 250, demos: 550, closes: 40, arr: 384000, workingDays: 21 },
+  "2026-05": { showups: 296, demos: 591, closes: 34, arr: 342540, workingDays: 21 },
 };
 
 function defaultFrom() {
@@ -27,6 +31,10 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
 
   try {
+    const cacheKey = `${from}|${to}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return NextResponse.json(cached);
+
     const [showupsRes, demosRes] = await Promise.all([
       pool.query(
         `
@@ -170,7 +178,9 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ rows: rows.reverse() });
+    const result = { rows: rows.reverse() };
+    cache.set(cacheKey, result);
+    return NextResponse.json(result);
   } catch (err: unknown) {
     console.error(err);
     const message = err instanceof Error ? err.message : "Unknown error";
