@@ -5,6 +5,8 @@ import { createCache } from "@/lib/cache";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cache = createCache<any>({ namespace: "outbound-cost", ttlMs: 10 * 60 * 1000 });
 
+export const dynamic = "force-dynamic";
+
 function defaultFrom() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
