@@ -65,7 +65,7 @@ now = datetime.utcnow()
 today_utc_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 # 🔥 last 7 FULL days window (excluding today)
-start = today_utc_midnight - timedelta(days=7)
+start = today_utc_midnight - timedelta(days=2)
 end = today_utc_midnight
 
 # format in ISO (same as your previous format)
