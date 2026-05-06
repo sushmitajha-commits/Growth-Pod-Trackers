@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 const TYPE1_IDS = [2811964, 3027655, 3082596, 3083047, 3083336, 3083390, 3083406, 3088976];
 const TYPE2_IDS = [2853186, 3103304, 3103452, 3103483, 3103535, 3103585, 3103594, 3103614];
 const TYPE3_IDS = [2902041, 3170652, 3170697, 3170717];

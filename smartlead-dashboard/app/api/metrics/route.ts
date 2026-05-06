@@ -5,6 +5,8 @@ import { createCache } from "@/lib/cache";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cache = createCache<any>({ namespace: "metrics", ttlMs: 10 * 60 * 1000 });
 
+export const dynamic = "force-dynamic";
+
 const DAILY_EMAIL_TARGET = 100000;
 
 function targetForDate(dateStr: string): number | null {

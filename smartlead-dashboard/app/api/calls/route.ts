@@ -5,6 +5,8 @@ import { createCache } from "@/lib/cache";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cache = createCache<any>({ namespace: "calls", ttlMs: 10 * 60 * 1000 });
 
+export const dynamic = "force-dynamic";
+
 // Per-month targets. Switched by the month of the `to` date so April still
 // shows April targets when the user filters back.
 type MonthCallTargets = {
