@@ -164,7 +164,7 @@ const AE_COLS: { key: string; short: string; full: string; isCurrency?: boolean;
   { key: "arr_target_till_date",    short: "ARR Target TD",     full: "ARR Target Till Date", isCurrency: true },
   { key: "arr_target",              short: "ARR Target",        full: "ARR Target", isCurrency: true },
   { key: "arr_attainment",          short: "ARR Attainment",    full: "Attainment — ARR", isPct: true },
-  { key: "working_days_gone",       short: "Days Gone",         full: "Working Days Gone (of 22)" },
+  { key: "working_days_gone",       short: "Days Gone",         full: "Working Days Gone" },
 ];
 
 /* ─── Aggregate helpers ─── */
@@ -459,10 +459,13 @@ export default function Dashboard() {
   const callSummary = callRows.length > 0 ? {
     callsMtd: callRows[0]?.calls_mtd ?? 0,
     callsAttainment: callRows[0]?.attainment ?? 0,
+    callTarget: callRows[0]?.target ?? 0,
     showupsMtd: callRows[0]?.showups_mtd ?? 0,
     showupAttainment: callRows[0]?.showup_attainment ?? 0,
+    showupPlan: callRows[0]?.showup_plan ?? 0,
     demoScheduledMtd: callRows[0]?.demos_scheduled_mtd ?? 0,
     demoAttainment: callRows[0]?.demo_attainment ?? 0,
+    demoPlan: callRows[0]?.demo_plan ?? 0,
   } : null;
 
   function renderAttainment(val: number | null) {
@@ -473,7 +476,7 @@ export default function Dashboard() {
 
   function renderEmailCell(row: EmailRow, col: ColDef<EmailRow>) {
     const val = row[col.key];
-    if (col.key === "date") return <span className="font-mono text-[12px] text-gray-700">{String(val)}</span>;
+    if (col.key === "date") return <span className="text-[12px] text-gray-700">{String(val)}</span>;
     if (col.key === "attainment") return renderAttainment(val as number | null);
     if (val === null || val === undefined) return <span className="text-gray-300">{"—"}</span>;
     return <span className="text-gray-800">{fmt(val as number, col.suffix || "")}</span>;
@@ -481,16 +484,19 @@ export default function Dashboard() {
 
   function renderCallCell(row: CallRow, col: ColDef<CallRow>) {
     const val = row[col.key];
-    if (col.key === "date") return <span className="font-mono text-[12px] text-gray-700">{String(val)}</span>;
+    if (col.key === "date") return <span className="text-[12px] text-gray-700">{String(val)}</span>;
     if (col.key === "attainment" || col.key === "showup_attainment" || col.key === "demo_attainment") return renderAttainment(val as number);
     return <span className="text-gray-800">{fmt(val as number, col.suffix || "")}</span>;
   }
 
-  function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  function StatCard({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) {
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <div className="text-[10px] uppercase tracking-[0.12em] font-semibold mb-2 text-gushwork-600">{label}</div>
-        <div className="text-[22px] font-bold text-gray-900 tracking-tight leading-none">{value}</div>
+        <div className="flex items-center gap-3">
+          <div className="text-[22px] font-bold text-gray-900 tracking-tight leading-none">{value}</div>
+          {pct !== undefined && <Donut pct={pct} />}
+        </div>
         {sub && <div className="text-[11px] text-gray-500 mt-1.5">{sub}</div>}
       </div>
     );
@@ -506,7 +512,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-white">
       {/* Top bar */}
       <div className="border-b border-gray-200 sticky top-0 z-10 bg-white">
-        <div className="max-w-[1900px] mx-auto px-8 py-3.5 flex items-center justify-between">
+        <div className="max-w-[1400px] mx-auto px-8 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/gushwork-logo.png" alt="Gushwork" className="h-5 w-auto" />
             <span className="h-5 w-px bg-gray-200" aria-hidden />
@@ -519,7 +525,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="max-w-[1900px] mx-auto px-8 py-8">
+      <div className="max-w-[1400px] mx-auto px-8 py-8">
         {/* Date Range + Tabs */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
           <div className="flex items-center bg-gray-100 rounded-lg p-1 w-fit">
@@ -545,7 +551,7 @@ export default function Dashboard() {
               className={`px-5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
                 tab === "cost" ? "bg-gushwork-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
               }`}>
-              SDR Cost Tracker
+              CAC Tracker
             </button>
             <button onClick={() => setTab("touchpoint")}
               className={`px-5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
@@ -574,7 +580,12 @@ export default function Dashboard() {
           <>
             {emailSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                <StatCard label="Total Emails Sent" value={emailSummary.totalSent.toLocaleString()} sub="in selected range" />
+                <StatCard
+                  label="Total Emails Sent"
+                  value={emailSummary.totalSent.toLocaleString()}
+                  sub={`${((emailSummary.totalSent / 2_000_000) * 100).toFixed(1)}% of 2,000,000 monthly target`}
+                  pct={(emailSummary.totalSent / 2_000_000) * 100}
+                />
                 <StatCard label="Avg Bounce Rate" value={`${emailSummary.avgBounce}%`} sub="across days" />
                 <StatCard label="Unique ≥2 Opens" value={emailSummary.totalUnique2Plus.toLocaleString()} sub="distinct leads in range" />
                 <StatCard label="Burner Demos" value={emailSummary.totalBurnerDemos.toLocaleString()} sub="demos booked" />
@@ -592,7 +603,7 @@ export default function Dashboard() {
               <div className="bg-rose-50 text-rose-600 rounded-lg p-3 mb-5 text-[11px] border border-rose-200">{emailError}</div>
             )}
 
-            <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+            <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mb-6">
               <table className="text-[12px] w-max">
                 <thead>
                   <tr>
@@ -633,11 +644,11 @@ export default function Dashboard() {
           <>
             {aeRows.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-                <StatCard label="Show-ups MTD" value={aeRows[0]?.showups_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.showup_attainment ?? 0}% of ${aeRows[0]?.showup_target ?? 296}`} />
-                <StatCard label="Demos MTD" value={aeRows[0]?.demos_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.demo_attainment ?? 0}% of ${aeRows[0]?.demo_target ?? 591}`} />
-                <StatCard label="Closes MTD" value={aeRows[0]?.closes_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.close_attainment ?? 0}% attainment`} />
-                <StatCard label="ARR Closed MTD" value={`$${(aeRows[0]?.arr_mtd ?? 0).toLocaleString()}`} sub={`${aeRows[0]?.arr_attainment ?? 0}% attainment`} />
-                <StatCard label="Working Days" value={`${aeRows[0]?.working_days_gone ?? 0} / 22`} sub={`${aeRows[0]?.pct_working_days ?? 0}% gone`} />
+                <StatCard label="Show-ups MTD" value={aeRows[0]?.showups_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.showup_attainment ?? 0}% of ${aeRows[0]?.showup_target ?? 299}`} pct={Number(aeRows[0]?.showup_attainment ?? 0)} />
+                <StatCard label="Demos MTD" value={aeRows[0]?.demos_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.demo_attainment ?? 0}% of ${aeRows[0]?.demo_target ?? 568}`} pct={Number(aeRows[0]?.demo_attainment ?? 0)} />
+                <StatCard label="Closes MTD" value={aeRows[0]?.closes_mtd?.toLocaleString() ?? "0"} sub={`${aeRows[0]?.close_attainment ?? 0}% of ${aeRows[0]?.closes_target ?? 0}`} pct={Number(aeRows[0]?.close_attainment ?? 0)} />
+                <StatCard label="ARR Closed MTD" value={`$${(aeRows[0]?.arr_mtd ?? 0).toLocaleString()}`} sub={`${aeRows[0]?.arr_attainment ?? 0}% of $${(aeRows[0]?.arr_target ?? 0).toLocaleString()}`} pct={Number(aeRows[0]?.arr_attainment ?? 0)} />
+                <StatCard label="Working Days" value={`${aeRows[0]?.working_days_gone ?? 0} / ${aeRows[0]?.working_days ?? 21}`} sub={`${aeRows[0]?.pct_working_days ?? 0}% gone`} pct={Number(aeRows[0]?.pct_working_days ?? 0)} />
               </div>
             )}
 
@@ -652,7 +663,7 @@ export default function Dashboard() {
               <div className="bg-rose-50 text-rose-600 rounded-lg p-3 mb-5 text-[11px] border border-rose-200">{aeError}</div>
             )}
 
-            <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+            <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mb-6">
               <table className="text-[12px] w-max">
                 <thead>
                   <tr>
@@ -673,13 +684,13 @@ export default function Dashboard() {
                           const raw = t[col.key];
                           let content: React.ReactNode;
                           if (col.key === "date") {
-                            content = <span className="font-mono text-[12px] text-gushwork-700">Total</span>;
+                            content = <span className="text-[12px] text-gushwork-700">Total</span>;
                           } else if (col.isPct) {
                             content = renderAttainment(Number(raw));
                           } else if (col.isCurrency) {
                             content = <span className="text-gray-800">${Number(raw ?? 0).toLocaleString()}</span>;
                           } else if (col.key === "working_days_gone") {
-                            content = <span className="text-gray-600">{Number(t.working_days_gone ?? 0)} / 22</span>;
+                            content = <span className="text-gray-600">{Number(t.working_days_gone ?? 0)} / {aeRows[0]?.working_days ?? 21}</span>;
                           } else {
                             content = <span className="text-gray-800">{fmt(Number(raw))}</span>;
                           }
@@ -694,13 +705,13 @@ export default function Dashboard() {
                         const raw = r[col.key];
                         let content: React.ReactNode;
                         if (col.key === "date") {
-                          content = <span className="font-mono text-[12px] text-gray-700">{String(raw)}</span>;
+                          content = <span className="text-[12px] text-gray-700">{String(raw)}</span>;
                         } else if (col.isPct) {
                           content = renderAttainment(Number(raw));
                         } else if (col.isCurrency) {
                           content = <span className="text-gray-800">${Number(raw ?? 0).toLocaleString()}</span>;
                         } else if (col.key === "working_days_gone") {
-                          content = <span className="text-gray-600">{r.working_days_gone} / 22</span>;
+                          content = <span className="text-gray-600">{r.working_days_gone} / {r.working_days ?? aeRows[0]?.working_days ?? 21}</span>;
                         } else {
                           content = <span className="text-gray-800">{fmt(Number(raw))}</span>;
                         }
@@ -719,10 +730,10 @@ export default function Dashboard() {
           <>
             {callSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                <StatCard label="Calls MTD" value={callSummary.callsMtd.toLocaleString()} sub={`${callSummary.callsAttainment}% of 100K target`} />
-                <StatCard label="Demos Scheduled MTD" value={callSummary.demoScheduledMtd.toLocaleString()} sub={`${callSummary.demoAttainment}% of 591 target`} />
-                <StatCard label="Showups MTD" value={callSummary.showupsMtd.toLocaleString()} sub={`${callSummary.showupAttainment}% of 296 target`} />
-                <StatCard label="Showup Attainment" value={`${callSummary.showupAttainment}%`} sub="vs 296 plan" />
+                <StatCard label="Calls MTD" value={callSummary.callsMtd.toLocaleString()} sub={`${callSummary.callsAttainment}% of ${callSummary.callTarget.toLocaleString()} target`} pct={Number(callSummary.callsAttainment)} />
+                <StatCard label="Demos Scheduled MTD" value={callSummary.demoScheduledMtd.toLocaleString()} sub={`${callSummary.demoAttainment}% of ${callSummary.demoPlan} target`} pct={Number(callSummary.demoAttainment)} />
+                <StatCard label="Showups MTD" value={callSummary.showupsMtd.toLocaleString()} sub={`${callSummary.showupAttainment}% of ${callSummary.showupPlan} target`} pct={Number(callSummary.showupAttainment)} />
+                <StatCard label="Showup Attainment" value={`${callSummary.showupAttainment}%`} sub={`vs ${callSummary.showupPlan} plan`} pct={Number(callSummary.showupAttainment)} />
               </div>
             )}
 
@@ -737,7 +748,7 @@ export default function Dashboard() {
               <div className="bg-rose-50 text-rose-600 rounded-lg p-3 mb-5 text-[11px] border border-rose-200">{callError}</div>
             )}
 
-            <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+            <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mb-6">
               <table className="text-[12px] w-max">
                 <thead>
                   <tr>
@@ -773,12 +784,13 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ─── SDR Cost Tracker Tab ─── */}
+        {/* ─── CAC Tracker Tab ─── */}
         {tab === "cost" && (
-          <SdrCostTracker
+          <CacTracker
             costRows={costRows}
             costLoading={costLoading}
             costError={costError}
+            to={to}
             thCls={thCls}
             tdCls={tdCls}
             tdTotalCls={tdTotalCls}
@@ -834,7 +846,7 @@ function BurnerTouchpointDB({ snapshots, loading, error }: {
   const thC = "px-4 py-3 text-right font-semibold text-[11px] bg-gray-50 border-b border-gray-200 tabular-nums text-gray-700 whitespace-nowrap";
   const thDate = "px-4 py-3 text-left font-semibold whitespace-nowrap text-[11px] bg-gray-50 border-b border-gray-200 text-gray-700";
   const tdC = "px-4 py-3 whitespace-nowrap text-[12px] tabular-nums border-b border-gray-100 text-right";
-  const tdDate = "px-4 py-3 whitespace-nowrap text-[12px] border-b border-gray-100 text-left font-mono font-medium text-gray-700";
+  const tdDate = "px-4 py-3 whitespace-nowrap text-[12px] border-b border-gray-100 text-left font-medium text-gray-700";
 
   const n = (v: number) => v.toLocaleString();
   const pct = (v: number, total: number) => total > 0 ? `${((v / total) * 100).toFixed(1)}%` : "—";
@@ -884,7 +896,7 @@ function BurnerTouchpointDB({ snapshots, loading, error }: {
         </div>
       )}
 
-      <div className="overflow-x-auto overflow-y-auto max-h-[65vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+      <div className="overflow-x-auto overflow-y-auto max-h-[65vh] rounded-lg bg-white border border-gray-200 mb-6">
         <table className="text-[12px] w-full">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -927,20 +939,87 @@ function BurnerTouchpointDB({ snapshots, loading, error }: {
   );
 }
 
-/* ─── SDR Cost Tracker (weekly + collapsible) ─── */
+/* ─── CAC Tracker (SDR cost + other monthly costs + summary) ─── */
 
-type SdrCostTrackerProps = {
+type CostValue = number | string;
+
+function Donut({ pct, size = 32, variant = "light" }: { pct: number; size?: number; variant?: "light" | "dark" }) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const stroke = 4;
+  const radius = (size - stroke) / 2;
+  const circ = 2 * Math.PI * radius;
+  const offset = circ * (1 - clamped / 100);
+  const trackColor = variant === "dark" ? "rgba(255,255,255,0.25)" : "#E5E7EB";
+  const fillColor = variant === "dark" ? "#FFFFFF" : "#2563EB";
+  const textColor = variant === "dark" ? "text-white" : "text-gushwork-700";
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={trackColor} strokeWidth={stroke} />
+        <circle
+          cx={size/2} cy={size/2} r={radius}
+          fill="none" stroke={fillColor} strokeWidth={stroke}
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${size/2} ${size/2})`}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className={`absolute inset-0 flex items-center justify-center text-[8px] font-semibold tabular-nums ${textColor}`}>
+        {Math.round(pct)}%
+      </div>
+    </div>
+  );
+}
+
+type MonthlyOtherCosts = {
+  justcall: CostValue;
+  enrichment: CostValue;
+  smartleadMailbox: CostValue;
+  smartleadSubscription: CostValue;
+  zapmail: CostValue;
+  industrySelect: CostValue;
+};
+
+const OTHER_COSTS: Record<string, MonthlyOtherCosts> = {
+  "2026-04": {
+    justcall: 1213.37,
+    enrichment: "To be invoiced",
+    smartleadMailbox: 2250,
+    smartleadSubscription: 1856,
+    zapmail: 9152.10,
+    industrySelect: 9000,
+  },
+  "2026-05": {
+    justcall: "To be invoiced",
+    enrichment: "To be invoiced",
+    smartleadMailbox: "To be invoiced",
+    smartleadSubscription: "To be invoiced",
+    zapmail: "To be invoiced",
+    industrySelect: 9000,
+  },
+};
+
+const SDR_COST_LIMIT = 58000;
+const BURNER_INFRA_LIMIT = 15000;
+const LEAD_ATTAINMENT_LIMIT = 9000;
+const TOTAL_CAC_LIMIT = SDR_COST_LIMIT + BURNER_INFRA_LIMIT + LEAD_ATTAINMENT_LIMIT;
+
+const numOrZero = (v: CostValue) => typeof v === "number" ? v : 0;
+
+type CacTrackerProps = {
   costRows: OutboundCostRow[];
   costLoading: boolean;
   costError: string | null;
+  to: string;
   thCls: string;
   tdCls: string;
   tdTotalCls: string;
   trCls: string;
-  StatCard: (props: { label: string; value: string; sub?: string }) => React.ReactElement;
+  StatCard: (props: { label: string; value: string; sub?: string; pct?: number }) => React.ReactElement;
 };
 
-function SdrCostTracker({ costRows, costLoading, costError, thCls, tdCls, tdTotalCls, trCls, StatCard }: SdrCostTrackerProps) {
+function CacTracker({ costRows, costLoading, costError, to, thCls, tdCls, tdTotalCls, trCls, StatCard }: CacTrackerProps) {
   const weekGroups = useMemo(() => {
     const map: Record<string, OutboundCostRow[]> = {};
     for (const r of costRows) {
@@ -985,15 +1064,118 @@ function SdrCostTracker({ costRows, costLoading, costError, thCls, tdCls, tdTota
 
   const fmtMoney = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtHrs = (n: number) => n.toFixed(2);
+  const fmtCost = (v: CostValue) => typeof v === "number" ? fmtMoney(v) : v;
+
+  const month = (to || "").substring(0, 7);
+  const other = OTHER_COSTS[month];
+
+  const sdrCost = totals.weekly_payout;
+  const coldCallingCost = other ? numOrZero(other.justcall) + numOrZero(other.enrichment) : 0;
+  const burnerInfraCost = other
+    ? numOrZero(other.smartleadMailbox) + numOrZero(other.smartleadSubscription) + numOrZero(other.zapmail)
+    : 0;
+  const leadAttainmentCost = other ? numOrZero(other.industrySelect) : 0;
+  const totalCac = sdrCost + coldCallingCost + burnerInfraCost + leadAttainmentCost;
+  const totalCacPct = (totalCac / TOTAL_CAC_LIMIT) * 100;
+  const sdrPct = (sdrCost / SDR_COST_LIMIT) * 100;
+  const burnerInfraPct = (burnerInfraCost / BURNER_INFRA_LIMIT) * 100;
+  const leadAttainmentPct = (leadAttainmentCost / LEAD_ATTAINMENT_LIMIT) * 100;
+
+  const monthLabel = month || "—";
+
+  const SectionHeading = ({ children }: { children: React.ReactNode }) => (
+    <div className="flex items-center gap-3 mb-3 mt-2">
+      <div className="text-[11px] uppercase tracking-[0.08em] text-gray-500 font-semibold">{children}</div>
+      <div className="flex-1 h-px bg-gray-200" />
+    </div>
+  );
+
+  const LineItem = ({ label, value }: { label: string; value: CostValue }) => (
+    <div className="flex items-baseline justify-between py-2 border-b border-gray-100 last:border-b-0">
+      <span className="text-[12px] text-gray-700">{label}</span>
+      <span className={`text-[12px] tabular-nums ${typeof value === "number" ? "text-gray-900 font-medium" : "text-gray-400 italic"}`}>
+        {fmtCost(value)}
+      </span>
+    </div>
+  );
 
   return (
     <>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-8">
+        <div className="bg-gushwork-500 text-white rounded-lg p-5 shadow-sm">
+          <div className="text-[11px] text-gushwork-50/90 font-medium mb-1.5 uppercase tracking-wide">Total CAC</div>
+          <div className="flex items-center gap-3">
+            <div className="text-2xl font-bold tabular-nums">{fmtMoney(totalCac)}</div>
+            <Donut pct={totalCacPct} variant="dark" />
+          </div>
+          <div className="text-[10px] text-gushwork-50/80 mt-1">vs {fmtMoney(TOTAL_CAC_LIMIT)} limit · {monthLabel}</div>
+        </div>
+        <StatCard label="Cold Calling Cost" value={fmtMoney(coldCallingCost)} sub="JustCall + Enrichment" />
+        <StatCard label="Burner Infra Cost" value={fmtMoney(burnerInfraCost)} sub={`vs ${fmtMoney(BURNER_INFRA_LIMIT)} limit`} pct={burnerInfraPct} />
+        <StatCard label="Lead Attainment" value={fmtMoney(leadAttainmentCost)} sub={`vs ${fmtMoney(LEAD_ATTAINMENT_LIMIT)} limit`} pct={leadAttainmentPct} />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="rounded-lg bg-white border border-gray-200 p-5">
+          <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-gray-200">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gushwork-600 font-semibold">Cold Calling Cost</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">{monthLabel}</div>
+            </div>
+            <div className="text-xl font-bold text-gray-900 tabular-nums">{fmtMoney(coldCallingCost)}</div>
+          </div>
+          {other ? (
+            <>
+              <LineItem label="JustCall" value={other.justcall} />
+              <LineItem label="Enrichment" value={other.enrichment} />
+            </>
+          ) : (
+            <div className="text-[11px] text-gray-400 py-3 text-center">No data for {monthLabel}.</div>
+          )}
+        </div>
+
+        <div className="rounded-lg bg-white border border-gray-200 p-5">
+          <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-gray-200">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gushwork-600 font-semibold">Burner Infra Cost</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">{monthLabel} · limit {fmtMoney(BURNER_INFRA_LIMIT)}</div>
+            </div>
+            <div className="text-xl font-bold text-gray-900 tabular-nums">{fmtMoney(burnerInfraCost)}</div>
+          </div>
+          {other ? (
+            <>
+              <LineItem label="Smartlead Mailbox" value={other.smartleadMailbox} />
+              <LineItem label="Smartlead Subscription" value={other.smartleadSubscription} />
+              <LineItem label="Zapmail" value={other.zapmail} />
+            </>
+          ) : (
+            <div className="text-[11px] text-gray-400 py-3 text-center">No data for {monthLabel}.</div>
+          )}
+        </div>
+
+        <div className="rounded-lg bg-white border border-gray-200 p-5">
+          <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-gray-200">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gushwork-600 font-semibold">Lead Attainment</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">{monthLabel} · limit {fmtMoney(LEAD_ATTAINMENT_LIMIT)}</div>
+            </div>
+            <div className="text-xl font-bold text-gray-900 tabular-nums">{fmtMoney(leadAttainmentCost)}</div>
+          </div>
+          {other ? (
+            <LineItem label="Industry Select" value={other.industrySelect} />
+          ) : (
+            <div className="text-[11px] text-gray-400 py-3 text-center">No data for {monthLabel}.</div>
+          )}
+        </div>
+      </div>
+
+      <SectionHeading>SDR Cost · limit {fmtMoney(SDR_COST_LIMIT)}</SectionHeading>
       {weekGroups.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <StatCard label="Weeks in Range" value={totals.week_count.toLocaleString()} sub={`${totals.sdr_weeks} SDR-weeks`} />
           <StatCard label="Total Hours Logged" value={fmtHrs(totals.hours_logged)} sub="all SDRs" />
           <StatCard label="Capped Hours" value={fmtHrs(totals.capped_hours)} sub="payable hours" />
-          <StatCard label="Total Cost Paid" value={fmtMoney(totals.weekly_payout)} sub={`avg $${totals.avg_rate.toFixed(2)}/hr`} />
+          <StatCard label="Total Cost Paid" value={fmtMoney(totals.weekly_payout)} sub={`vs ${fmtMoney(SDR_COST_LIMIT)} limit · avg $${totals.avg_rate.toFixed(2)}/hr`} pct={sdrPct} />
         </div>
       )}
 
@@ -1008,7 +1190,7 @@ function SdrCostTracker({ costRows, costLoading, costError, thCls, tdCls, tdTota
         <div className="bg-rose-50 text-rose-600 rounded-lg p-3 mb-5 text-[11px] border border-rose-200">{costError}</div>
       )}
 
-      <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+      <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mb-8">
         <table className="text-[12px] w-full">
           <thead>
             <tr>
@@ -1027,7 +1209,7 @@ function SdrCostTracker({ costRows, costLoading, costError, thCls, tdCls, tdTota
             {weekGroups.length > 0 && (
               <tr>
                 <td className={tdTotalCls}></td>
-                <td className={tdTotalCls}><span className="font-mono text-[12px] text-gushwork-700">Total</span></td>
+                <td className={tdTotalCls}><span className="text-[12px] text-gushwork-700">Total</span></td>
                 <td className={tdTotalCls}><span className="text-gray-800">{totals.sdr_weeks}</span></td>
                 <td className={tdTotalCls}><span className="text-gray-800">{fmtHrs(totals.hours_logged)}</span></td>
                 <td className={tdTotalCls}><span className="text-gray-800">{fmtHrs(totals.capped_hours)}</span></td>
@@ -1045,7 +1227,7 @@ function SdrCostTracker({ costRows, costLoading, costError, thCls, tdCls, tdTota
                     <td className={tdCls}>
                       <span className="inline-block w-4 text-gushwork-600 select-none">{isOpen ? "▾" : "▸"}</span>
                     </td>
-                    <td className={tdCls}><span className="font-mono text-[12px] text-gray-700">{week.week_start}</span></td>
+                    <td className={tdCls}><span className="text-[12px] text-gray-700">{week.week_start}</span></td>
                     <td className={tdCls}><span className="text-gray-800">{week.sdr_count}</span></td>
                     <td className={tdCls}><span className="text-gray-800">{fmtHrs(week.hours_logged)}</span></td>
                     <td className={tdCls}><span className="text-gray-800">{fmtHrs(week.capped_hours)}</span></td>
@@ -1087,6 +1269,7 @@ function SdrCostTracker({ costRows, costLoading, costError, thCls, tdCls, tdTota
           </tbody>
         </table>
       </div>
+
     </>
   );
 }
@@ -1101,7 +1284,7 @@ type MasterDBProps = {
   tdCls: string;
   tdTotalCls: string;
   trCls: string;
-  StatCard: (props: { label: string; value: string; sub?: string }) => React.ReactElement;
+  StatCard: (props: { label: string; value: string; sub?: string; pct?: number }) => React.ReactElement;
 };
 
 type MasterDBFilter = "all" | "burner" | "nonburner";
@@ -1235,7 +1418,7 @@ function MasterDB({ rows, loading, error, thCls, tdCls, tdTotalCls, trCls, StatC
         <div className="bg-rose-50 text-rose-600 rounded-lg p-3 mb-5 text-[11px] border border-rose-200">{error}</div>
       )}
 
-      <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mx-6 mb-6">
+      <div className="overflow-x-auto overflow-y-auto max-h-[58vh] rounded-lg bg-white border border-gray-200 mb-6">
         <table className="text-[12px] w-full">
           <thead>
             <tr>
@@ -1250,7 +1433,7 @@ function MasterDB({ rows, loading, error, thCls, tdCls, tdTotalCls, trCls, StatC
             )}
             {computed.length > 0 && (
               <tr>
-                <td className={tdTotalCls}><span className="font-mono text-[12px] text-gushwork-700">Total</span></td>
+                <td className={tdTotalCls}><span className="text-[12px] text-gushwork-700">Total</span></td>
                 <td className={tdTotalCls}><span className="text-gray-800">{n(totals.leads_contacted)}</span></td>
                 <td className={tdTotalCls}><span className="text-gray-800">{n(totals.email_only)}</span></td>
                 <td className={tdTotalCls}><span className="text-gray-800">{n(totals.call_email)}</span></td>
@@ -1262,7 +1445,7 @@ function MasterDB({ rows, loading, error, thCls, tdCls, tdTotalCls, trCls, StatC
             )}
             {computed.map((row) => (
               <tr key={row.week_start} className={trCls}>
-                <td className={tdCls}><span className="font-mono text-[12px] text-gray-700">{row.week_start}</span></td>
+                <td className={tdCls}><span className="text-[12px] text-gray-700">{row.week_start}</span></td>
                 <td className={tdCls}><span className="text-gray-800">{n(row.leads_contacted)}</span></td>
                 <td className={tdCls}><span className="text-gray-800">{n(row.email_only)}</span></td>
                 <td className={tdCls}><span className="text-gray-800">{n(row.call_email)}</span></td>

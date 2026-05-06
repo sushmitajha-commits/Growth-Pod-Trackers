@@ -3,7 +3,7 @@ import pool from "@/lib/db";
 import { createCache } from "@/lib/cache";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cache = createCache<any>(10 * 60 * 1000);
+const cache = createCache<any>({ namespace: "ae-tracker", ttlMs: 10 * 60 * 1000 });
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ const MONTHLY_TARGETS: Record<string, {
   showups: number; demos: number; closes: number; arr: number; workingDays: number;
 }> = {
   "2026-04": { showups: 250, demos: 550, closes: 40, arr: 384000, workingDays: 22 },
-  "2026-05": { showups: 296, demos: 591, closes: 34, arr: 342540, workingDays: 21 },
+  "2026-05": { showups: 299, demos: 568, closes: 24, arr: 242598, workingDays: 21 },
 };
 
 function defaultFrom() {
@@ -174,6 +174,7 @@ export async function GET(req: NextRequest) {
         arr_target: t.arr,
         arr_attainment: t.arr > 0 ? Number(((arrMtd / t.arr) * 100).toFixed(2)) : 0,
         working_days_gone: dayIndex,
+        working_days: t.workingDays,
         pct_working_days: Number(((dayIndex / t.workingDays) * 100).toFixed(1)),
       };
     });
