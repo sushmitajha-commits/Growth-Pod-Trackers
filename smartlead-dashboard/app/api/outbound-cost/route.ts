@@ -3,7 +3,7 @@ import pool from "@/lib/db";
 import { createCache } from "@/lib/cache";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cache = createCache<any>(10 * 60 * 1000);
+const cache = createCache<any>({ namespace: "outbound-cost", ttlMs: 10 * 60 * 1000 });
 
 function defaultFrom() {
   const d = new Date();
@@ -45,12 +45,13 @@ export async function GET(req: NextRequest) {
         GROUP BY 1, 2
       ),
       sdrs AS (
-        SELECT
+        SELECT DISTINCT ON (LOWER(TRIM("Official_Email")))
           LOWER(TRIM("Official_Email")) AS email,
           COALESCE(NULLIF("Real_Name", ''), "Name") AS real_name,
           "Current_Status",
           CAST(REGEXP_REPLACE("Pay_Scale__hr_", '[^0-9.]', '', 'g') AS NUMERIC) AS hourly_rate
         FROM airbyte_ingestion.sdr_info_sdr
+        ORDER BY LOWER(TRIM("Official_Email")), CASE WHEN "Current_Status" = 'Active' THEN 0 ELSE 1 END
       )
       SELECT
         h.user_email,

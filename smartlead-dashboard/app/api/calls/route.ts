@@ -3,15 +3,29 @@ import pool from "@/lib/db";
 import { createCache } from "@/lib/cache";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cache = createCache<any>(10 * 60 * 1000);
+const cache = createCache<any>({ namespace: "calls", ttlMs: 10 * 60 * 1000 });
 
-// Showup targets for the month (21 working days, target = 296)
-const SHOWUP_TARGETS = Array.from({ length: 21 }, (_, i) => Math.round((296 / 21) * (i + 1)));
+// Per-month targets. Switched by the month of the `to` date so April still
+// shows April targets when the user filters back.
+type MonthCallTargets = {
+  contacts: number;
+  showupPlan: number;
+  callTarget: number;
+  demoPlan: number;
+  workingDays: number;
+};
+const MONTHLY_CALL_TARGETS: Record<string, MonthCallTargets> = {
+  "2026-04": { contacts: 79000, showupPlan: 185, callTarget: 92400, demoPlan: 463, workingDays: 22 },
+  "2026-05": { contacts: 80000, showupPlan: 299, callTarget: 100000, demoPlan: 624, workingDays: 21 },
+};
+const DEFAULT_CALL_TARGETS: MonthCallTargets = MONTHLY_CALL_TARGETS["2026-05"];
 
-// Demo plan targets for the month (21 working days, target = 591)
-const DEMO_PLAN_TARGETS = Array.from({ length: 21 }, (_, i) => Math.round((591 / 21) * (i + 1)));
+function getMonthTargets(toDate: string): MonthCallTargets {
+  const month = toDate.substring(0, 7);
+  return MONTHLY_CALL_TARGETS[month] || DEFAULT_CALL_TARGETS;
+}
 
-// New contacts loaded: hardcoded Apr 1–18
+// New contacts loaded: hardcoded Apr 1–24
 const NEW_CONTACTS_MAP: Record<string, number> = {
   "2026-04-01": 4758,
   "2026-04-02": 3498,
@@ -34,12 +48,6 @@ const NEW_CONTACTS_MAP: Record<string, number> = {
   "2026-04-24": 1671,
 };
 
-const MONTHLY_MAX_CONTACTS = 79000;
-const SHOWUP_PLAN = 296;
-const TOTAL_WORKING_DAYS = 21;
-const MONTH_CALL_TARGET = 100000;
-const MONTH_DEMO_PLAN = 591;
-
 function defaultFrom() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
@@ -54,6 +62,14 @@ export async function GET(req: NextRequest) {
     const cacheKey = `${from}|${to}`;
     const cached = cache.get(cacheKey);
     if (cached) return NextResponse.json(cached);
+
+    const targets = getMonthTargets(to);
+    const showupTargetsArr = Array.from({ length: targets.workingDays }, (_, i) =>
+      Math.round((targets.showupPlan / targets.workingDays) * (i + 1))
+    );
+    const demoPlanTargetsArr = Array.from({ length: targets.workingDays }, (_, i) =>
+      Math.round((targets.demoPlan / targets.workingDays) * (i + 1))
+    );
 
     // Run the three queries in parallel — each acquires its own pooled client.
     const [callsRes, showupsRes, demosRes] = await Promise.all([
@@ -97,7 +113,7 @@ export async function GET(req: NextRequest) {
         WHERE EXTRACT(DOW FROM date) NOT IN (0, 6)
         ORDER BY date DESC
         `,
-        [from, to, MONTH_CALL_TARGET]
+        [from, to, targets.callTarget]
       ),
       pool.query(
         `
@@ -172,8 +188,8 @@ export async function GET(req: NextRequest) {
       const dayDemosScheduled = demosScheduledMap[dateStr] ?? 0;
       demosScheduledMtd += dayDemosScheduled;
 
-      const showupTarget = SHOWUP_TARGETS[dayIndex] ?? SHOWUP_TARGETS[SHOWUP_TARGETS.length - 1];
-      const demoPlan = DEMO_PLAN_TARGETS[dayIndex] ?? DEMO_PLAN_TARGETS[DEMO_PLAN_TARGETS.length - 1];
+      const showupTarget = showupTargetsArr[dayIndex] ?? showupTargetsArr[showupTargetsArr.length - 1];
+      const demoPlan = demoPlanTargetsArr[dayIndex] ?? demoPlanTargetsArr[demoPlanTargetsArr.length - 1];
       const workingDaysGone = dayIndex + 1;
 
       computedMap[dateStr] = {
@@ -185,7 +201,7 @@ export async function GET(req: NextRequest) {
         demos_scheduled_mtd: demosScheduledMtd,
         demo_plan: demoPlan,
         working_days_gone: workingDaysGone,
-        pct_working_days: Number(((workingDaysGone / TOTAL_WORKING_DAYS) * 100).toFixed(1)),
+        pct_working_days: Number(((workingDaysGone / targets.workingDays) * 100).toFixed(1)),
       };
       dayIndex++;
     }
@@ -213,13 +229,13 @@ export async function GET(req: NextRequest) {
         unique_dials: Number(r.unique_dials),
         new_contacts: c.new_contacts,
         unique_contacts_mtd: c.unique_contacts_mtd,
-        monthly_max_contacts: MONTHLY_MAX_CONTACTS,
-        pct_contacts_used: Number(((c.unique_contacts_mtd / MONTHLY_MAX_CONTACTS) * 100).toFixed(2)),
+        monthly_max_contacts: targets.contacts,
+        pct_contacts_used: Number(((c.unique_contacts_mtd / targets.contacts) * 100).toFixed(2)),
         demos: demos,
         demos_scheduled: demosScheduled,
         demos_scheduled_mtd: c.demos_scheduled_mtd,
-        demo_plan: MONTH_DEMO_PLAN,
-        demo_attainment: Number(((c.demos_scheduled_mtd / MONTH_DEMO_PLAN) * 100).toFixed(2)),
+        demo_plan: targets.demoPlan,
+        demo_attainment: Number(((c.demos_scheduled_mtd / targets.demoPlan) * 100).toFixed(2)),
         demo_to_call_rate: totalCalls > 0
           ? Number(((demos / totalCalls) * 100).toFixed(2)) : 0,
         showup_rate: demosScheduled > 0
@@ -227,14 +243,23 @@ export async function GET(req: NextRequest) {
         showups: c.showups,
         showups_mtd: c.showups_mtd,
         showup_target: c.showup_target,
-        showup_plan: SHOWUP_PLAN,
-        showup_attainment: Number(((c.showups_mtd / SHOWUP_PLAN) * 100).toFixed(2)),
+        showup_plan: targets.showupPlan,
+        showup_attainment: Number(((c.showups_mtd / targets.showupPlan) * 100).toFixed(2)),
         working_days_gone: c.working_days_gone,
         pct_working_days: c.pct_working_days,
       };
     });
 
-    const result = { rows };
+    const result = {
+      rows,
+      targets: {
+        contacts: targets.contacts,
+        showup_plan: targets.showupPlan,
+        call_target: targets.callTarget,
+        demo_plan: targets.demoPlan,
+        working_days: targets.workingDays,
+      },
+    };
     cache.set(cacheKey, result);
     return NextResponse.json(result);
   } catch (err: unknown) {
